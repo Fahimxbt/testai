@@ -10,7 +10,6 @@ from datetime import datetime
 
 from telethon import TelegramClient, events
 from telethon.sessions import StringSession
-import aiohttp
 import httpx
 
 # ═══════════════════════════════════════════════════════════════
@@ -25,7 +24,6 @@ VIBECHAT_BOT = "chatxbt_bot"
 
 MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY", "")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-AI_HORDE_KEY = os.getenv("AI_HORDE_KEY", "0000000000")
 
 CHAT_DURATION = int(os.getenv("CHAT_DURATION", "300"))
 WAIT_DURATION = int(os.getenv("WAIT_DURATION", "600"))
@@ -59,8 +57,8 @@ if GROQ_API_KEY:
 CHARACTER_PROMPT = """You are "Riya", a 21-year-old girl chatting on an anonymous app.
 
 RULES - FOLLOW EXACTLY:
-- Reply in ONE short sentence only. Max 10-15 words.
-- Use emojis VERY rarely (1 per 3-4 messages max). Only basic ones like 😏 or 😘.
+- Reply in ONE short sentence only. Max 5-8 words.
+- Use emojis VERY rarely (1 per 5-6 messages max). Only basic ones like 😏 or 😘.
 - NO Hinglish. Only English.
 - Casual, imperfect typing. Make typos sometimes (teh, dont, cant, ur, u, rn, lol).
 - Lowercase often. Skip punctuation sometimes.
@@ -71,6 +69,7 @@ RULES - FOLLOW EXACTLY:
 - Sometimes just "lol" or "hmm" or "why" to be mysterious
 - Dont use perfect grammar. Skip words sometimes.
 - Match their energy - if theyre boring, give short replies
+- NO emojis at the end of sentences unless absolutely necessary
 
 DENIALS:
 - Photos: "nah i dont share pics here"
@@ -85,7 +84,7 @@ CHAT HISTORY:
 
 STRANGER SAID: "{message}"
 
-YOUR RESPONSE (one short casual sentence, 10-15 words max):"""
+YOUR RESPONSE (one very short casual sentence, 5-8 words max, NO trailing emoji unless its part of the vibe):"""
 
 # ═══════════════════════════════════════════════════════════════
 # STATE MACHINE
@@ -107,19 +106,22 @@ class VibeChatAIBot:
         self.message_count = 0
         self.total_interactions = 0
         self.last_message_time = None
-        self.vibechat_entity = None
+        self.pending_reply = False  # prevent double texting
+        self.last_sent_text = None  # track last sent to avoid dupes
 
     def reset_chat(self):
         self.chat_history = []
         self.chat_start_time = None
         self.message_count = 0
         self.last_message_time = None
+        self.pending_reply = False
+        self.last_sent_text = None
 
     def format_history(self) -> str:
         if not self.chat_history:
             return "(Just started chatting)"
         formatted = []
-        for entry in self.chat_history[-10:]:
+        for entry in self.chat_history[-6:]:
             role = "Stranger" if entry["role"] == "user" else "Riya"
             formatted.append(f'{role}: {entry["content"]}')
         return "\n".join(formatted)
@@ -135,28 +137,9 @@ async def get_ai_response(message_text: str) -> str:
     prompt = CHARACTER_PROMPT.format(history=history, message=message_text)
 
     messages = [
-        {"role": "system", "content": "You are Riya, a flirty 21-year-old Indian girl. Keep responses short, natural, use emojis."},
+        {"role": "system", "content": "You are Riya, a flirty 21-year-old Indian girl. Keep responses very short, natural, almost no emojis."},
         {"role": "user", "content": prompt}
     ]
-
-    if mistral_client:
-        try:
-            response = await mistral_client.post(
-                "/chat/completions",
-                json={
-                    "model": "mistral-small-latest",
-                    "messages": messages,
-                    "temperature": 0.95,
-                    "max_tokens": 25,
-                    "top_p": 0.9
-                }
-            )
-            data = response.json()
-            text = data["choices"][0]["message"]["content"].strip()
-            if text:
-                return clean_response(text)
-        except Exception as e:
-            print(f"[Mistral Error] {e}")
 
     if groq_client:
         try:
@@ -165,8 +148,8 @@ async def get_ai_response(message_text: str) -> str:
                 json={
                     "model": "llama-3.3-70b-versatile",
                     "messages": messages,
-                    "temperature": 0.95,
-                    "max_tokens": 25,
+                    "temperature": 0.9,
+                    "max_tokens": 15,
                     "top_p": 0.9
                 }
             )
@@ -177,12 +160,43 @@ async def get_ai_response(message_text: str) -> str:
         except Exception as e:
             print(f"[Groq Error] {e}")
 
-    return await ai_horde_generate(message_text, history)
+    if mistral_client:
+        try:
+            response = await mistral_client.post(
+                "/chat/completions",
+                json={
+                    "model": "mistral-small-latest",
+                    "messages": messages,
+                    "temperature": 0.9,
+                    "max_tokens": 15,
+                    "top_p": 0.9
+                }
+            )
+            data = response.json()
+            text = data["choices"][0]["message"]["content"].strip()
+            if text:
+                return clean_response(text)
+        except Exception as e:
+            print(f"[Mistral Error] {e}")
+
+    return random.choice([
+        "lol",
+        "hmm",
+        "why",
+        "nah",
+        "maybe",
+        "idk",
+        "u tell me"
+    ])
 
 def clean_response(text: str) -> str:
     text = text.strip().strip('"').strip("'")
     if text.lower().startswith("riya:"):
         text = text[5:].strip()
+
+    # Strip trailing emojis
+    while text and ord(text[-1]) > 127:
+        text = text[:-1].strip()
 
     bad_phrases = [
         "as an ai", "i'm an ai", "i am an ai", "as a language model",
@@ -192,63 +206,14 @@ def clean_response(text: str) -> str:
     for phrase in bad_phrases:
         if phrase.lower() in text.lower():
             fallbacks = [
-                "hehe youre so naughty 😏 tell me more...",
-                "lol youre funny 😘 what else?",
-                "hmm... 😏 keep going bby",
-                "youre making me blush 🙈"
+                "hehe youre so naughty",
+                "lol youre funny",
+                "hmm... keep going bby",
+                "youre making me blush"
             ]
             return random.choice(fallbacks)
 
     return text
-
-async def ai_horde_generate(message_text: str, history: str) -> str:
-    prompt = f"{history}\nStranger: {message_text}\nRiya:"
-
-    payload = {
-        "prompt": prompt,
-        "params": {
-            "max_length": 25,
-            "temperature": 0.95,
-            "top_p": 0.9,
-            "top_k": 40,
-            "rep_pen": 1.1
-        },
-        "models": ["PygmalionAI/pygmalion-6b", "TheBloke/MythoMax-L2-13B"],
-        "trusted_workers": True,
-        "api_key": AI_HORDE_KEY
-    }
-
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                "https://aihorde.net/api/v2/generate/text/async",
-                json=payload,
-                timeout=aiohttp.ClientTimeout(total=60)
-            ) as resp:
-                data = await resp.json()
-                job_id = data.get("id")
-
-                if not job_id:
-                    return "hmm... 😏"
-
-                for _ in range(30):
-                    await asyncio.sleep(2)
-                    async with session.get(
-                        f"https://aihorde.net/api/v2/generate/text/status/{job_id}",
-                        timeout=aiohttp.ClientTimeout(total=30)
-                    ) as status_resp:
-                        status = await status_resp.json()
-                        if status.get("done"):
-                            generations = status.get("generations", [])
-                            if generations:
-                                text = generations[0].get("text", "").strip()
-                                return clean_response(text)
-                            break
-
-                return "hehe 😏"
-    except Exception as e:
-        print(f"[AI Horde Error] {e}")
-        return "lol youre fun 😘"
 
 # ═══════════════════════════════════════════════════════════════
 # TELETHON CLIENT
@@ -278,8 +243,7 @@ async def start_finding_vibe():
     bot_state.reset_chat()
     bot_state.message_count = 0
     bot_message_ids.clear()
-    
-    last_reply_time = None
+
     sent = await client.send_message(VIBECHAT_BOT, "⚡ Find a Vibe")
     bot_message_ids.add(sent.id)
     print(f"[{now()}] → Find a Vibe")
@@ -297,17 +261,40 @@ async def send_stop():
     print(f"[{now()}] → Stop")
     bot_state.state = BotState.RATING
 
+async def click_inline_button(button_text: str):
+    """Click an inline button by text on the bot's last message."""
+    try:
+        async for message in client.iter_messages(VIBECHAT_BOT, limit=5):
+            if message.buttons:
+                for row in message.buttons:
+                    for btn in row:
+                        if button_text.lower() in btn.text.lower():
+                            await btn.click()
+                            print(f"[{now()}] → Clicked inline button: {btn.text}")
+                            return True
+        print(f"[{now()}] ⚠️ Button '{button_text}' not found")
+        return False
+    except Exception as e:
+        print(f"[{now()}] [Button Click Error] {e}")
+        return False
+
 async def send_report():
-    sent = await client.send_message(VIBECHAT_BOT, "🚫 Report")
-    bot_message_ids.add(sent.id)
+    # Try clicking inline Report button first
+    clicked = await click_inline_button("Report")
+    if not clicked:
+        sent = await client.send_message(VIBECHAT_BOT, "🚫 Report")
+        bot_message_ids.add(sent.id)
     print(f"[{now()}] → Report (tracking interaction)")
     bot_state.total_interactions += 1
     bot_state.state = BotState.REPORTING
     await asyncio.sleep(2)
 
 async def select_report_other():
-    sent = await client.send_message(VIBECHAT_BOT, "Other")
-    bot_message_ids.add(sent.id)
+    # Try clicking inline Other button first
+    clicked = await click_inline_button("Other")
+    if not clicked:
+        sent = await client.send_message(VIBECHAT_BOT, "Other")
+        bot_message_ids.add(sent.id)
     print(f"[{now()}] → Selected 'Other' as report reason")
     print(f"[{now()}] 📊 Total interactions tracked: {bot_state.total_interactions}")
     bot_state.state = BotState.WAITING
@@ -316,7 +303,7 @@ async def select_report_other():
 async def wait_then_find():
     print(f"[{now()}] ⏳ Waiting {WAIT_DURATION}s before next match...")
     await asyncio.sleep(WAIT_DURATION)
-    bot_state.state = BotState.IDLE  # Reset state before finding
+    bot_state.state = BotState.IDLE
     await start_finding_vibe()
 
 async def auto_end_chat():
@@ -324,11 +311,7 @@ async def auto_end_chat():
         print(f"[{now()}] Auto-end skipped: not in chat mode")
         return
 
-    goodbyes = [
-        "gotta go",
-        "bye",
-        "cya"
-    ]
+    goodbyes = ["gotta go", "bye", "cya"]
     bye_msg = random.choice(goodbyes)
 
     sent = await client.send_message(VIBECHAT_BOT, bye_msg)
@@ -346,14 +329,11 @@ def now():
 # MESSAGE HANDLER
 # ═══════════════════════════════════════════════════════════════
 
-# Track bot's own message IDs to avoid replying to itself
 bot_message_ids = set()
 last_reply_time = None
 
 @client.on(events.NewMessage(chats=VIBECHAT_BOT))
 async def handle_vibechat_message(event):
-    
-
     text = event.message.text or ""
     msg_id = event.message.id
 
@@ -372,12 +352,9 @@ async def handle_vibechat_message(event):
 
             asyncio.create_task(auto_end_after_delay())
 
-            # Wait 2-5 seconds before opening (human-like)
             await asyncio.sleep(3)
 
-            openings = [
-                "hey", "hi", "sup", "yo", "hii", "hey there"
-            ]
+            openings = ["hey", "hi", "sup", "yo", "hii", "hey there"]
             opening = random.choice(openings)
 
             sent = await client.send_message(VIBECHAT_BOT, opening)
@@ -389,12 +366,18 @@ async def handle_vibechat_message(event):
 
     # ─── STATE: CHATTING ───
     elif bot_state.state == BotState.CHATTING:
+        # Prevent double texting
+        if bot_state.pending_reply:
+            print(f"[{now()}] ⏳ Already replying, skipping")
+            return
+
         text_clean = text.strip()
         text_lower = text_clean.lower()
 
         # ALWAYS reply to M or F (gender reveal)
         if text_clean in ["M", "F", "m", "f"]:
             print(f"[{now()}] Gender message detected: {text_clean}")
+            bot_state.pending_reply = True
             if text_clean in ["M", "m"]:
                 reply = "F"
             else:
@@ -405,6 +388,7 @@ async def handle_vibechat_message(event):
             bot_message_ids.add(sent.id)
             bot_state.chat_history.append({"role": "user", "content": text_clean})
             bot_state.chat_history.append({"role": "assistant", "content": reply})
+            bot_state.pending_reply = False
             print(f"[{now()}] AI: {reply}")
             return
 
@@ -414,7 +398,8 @@ async def handle_vibechat_message(event):
             "rate your partner", "find a new vibe", "you stopped the chat",
             "hunting for your vibe", "don't be shy", "say hi first",
             "stranger!", "matched with", "tap something", "ayo",
-            "⏭️", "⏹️", "❤️", "💔", "🚫", "👋", "👇", "⚡", "✨"
+            "⏭️", "⏹️", "❤️", "💔", "🚫", "👋", "👇", "⚡", "✨",
+            "vibe", "no vibe", "report sent", "we'll review"
         ]
         if any(x in text_lower for x in system_msgs):
             print(f"[{now()}] Skipping system message")
@@ -425,29 +410,37 @@ async def handle_vibechat_message(event):
             print(f"[{now()}] Skipping short message: '{text_clean}'")
             return
 
+        # Rate limit check - per minute sliding window
+        if bot_state.last_message_time:
+            elapsed = (datetime.now() - bot_state.last_message_time).total_seconds()
+            if elapsed < 10:  # minimum 10 seconds between replies
+                print(f"[{now()}] ⚠️ Rate limit: {elapsed:.1f}s since last reply")
+                return
 
+        bot_state.pending_reply = True
 
         # Add to history
         bot_state.chat_history.append({"role": "user", "content": text})
         bot_state.message_count += 1
         bot_state.last_message_time = datetime.now()
 
-        # Rate limit check
-        if bot_state.message_count > MAX_MESSAGES_PER_MIN:
-            print(f"[{now()}] ⚠️ Rate limit hit")
-            return
-
-        # Human-like typing delay (3-8 seconds)
-        await asyncio.sleep(5)
+        # Human-like typing delay (5-12 seconds)
+        await asyncio.sleep(random.randint(5, 12))
 
         # Generate AI response
         ai_response = await get_ai_response(text)
+
+        # Avoid sending duplicate of last message
+        if ai_response == bot_state.last_sent_text:
+            ai_response = random.choice(["lol", "hmm", "why", "nah", "ok", "sure"])
+
+        bot_state.last_sent_text = ai_response
         bot_state.chat_history.append({"role": "assistant", "content": ai_response})
 
         # Send and track our message
         sent = await client.send_message(VIBECHAT_BOT, ai_response)
         bot_message_ids.add(sent.id)
-        
+        bot_state.pending_reply = False
 
         print(f"[{now()}] AI: {ai_response[:80]}")
 
@@ -459,7 +452,7 @@ async def handle_vibechat_message(event):
 
     # ─── STATE: REPORTING ───
     elif bot_state.state == BotState.REPORTING:
-        if any(x in text.lower() for x in ["reason", "why", "select", "option"]):
+        if any(x in text.lower() for x in ["reason", "why", "select", "option", "harassment", "inappropriate", "spam"]):
             await asyncio.sleep(1)
             await select_report_other()
         else:
@@ -529,7 +522,7 @@ async def main():
         return
 
     if not MISTRAL_API_KEY and not GROQ_API_KEY:
-        print("⚠️ No AI keys! Using AI Horde only (very slow)")
+        print("⚠️ No AI keys! Using fallback responses only")
         print("Get free keys: mistral.ai | groq.com")
 
     if SESSION_STRING:
