@@ -1,5 +1,6 @@
 """
-VibeChat AI Girl - Self-Test Bot
+VibeChat AI Girl - Self-Test Bot (Telethon Version)
+Tests AI behavior on YOUR OWN extra Telegram account.
 """
 
 import os
@@ -7,8 +8,7 @@ import asyncio
 import random
 from datetime import datetime
 
-from pyrogram import Client, filters
-from pyrogram.types import Message
+from telethon import TelegramClient, events
 import aiohttp
 import httpx
 
@@ -105,6 +105,7 @@ class VibeChatAIBot:
         self.message_count = 0
         self.total_interactions = 0
         self.last_message_time = None
+        self.vibechat_entity = None
 
     def reset_chat(self):
         self.chat_history = []
@@ -248,26 +249,22 @@ async def ai_horde_generate(message_text: str, history: str) -> str:
         return "lol youre fun 😘"
 
 # ═══════════════════════════════════════════════════════════════
-# PYROGRAM APP - with in_memory to avoid session file issues
+# TELETHON CLIENT
 # ═══════════════════════════════════════════════════════════════
 
 if SESSION_STRING:
     print("[INFO] Using session string login")
-    app = Client(
-        "vibechat_ai_girl",
-        api_id=TELEGRAM_API_ID,
-        api_hash=TELEGRAM_API_HASH,
-        session_string=SESSION_STRING,
-        in_memory=True
+    client = TelegramClient(
+        StringSession(SESSION_STRING),
+        TELEGRAM_API_ID,
+        TELEGRAM_API_HASH
     )
 else:
     print("[INFO] Using phone number login")
-    app = Client(
+    client = TelegramClient(
         "vibechat_ai_girl",
-        api_id=TELEGRAM_API_ID,
-        api_hash=TELEGRAM_API_HASH,
-        phone_number=TELEGRAM_PHONE,
-        in_memory=True
+        TELEGRAM_API_ID,
+        TELEGRAM_API_HASH
     )
 
 # ═══════════════════════════════════════════════════════════════
@@ -277,29 +274,29 @@ else:
 async def start_finding_vibe():
     bot_state.state = BotState.FINDING
     bot_state.reset_chat()
-    await app.send_message(VIBECHAT_BOT, "⚡ Find a Vibe")
+    await client.send_message(VIBECHAT_BOT, "⚡ Find a Vibe")
     print(f"[{now()}] → Find a Vibe")
 
 async def send_next():
-    await app.send_message(VIBECHAT_BOT, "⏭️ Next")
+    await client.send_message(VIBECHAT_BOT, "⏭️ Next")
     print(f"[{now()}] → Next")
     bot_state.state = BotState.FINDING
     bot_state.reset_chat()
 
 async def send_stop():
-    await app.send_message(VIBECHAT_BOT, "⏹️ Stop")
+    await client.send_message(VIBECHAT_BOT, "⏹️ Stop")
     print(f"[{now()}] → Stop")
     bot_state.state = BotState.RATING
 
 async def send_report():
-    await app.send_message(VIBECHAT_BOT, "🚫 Report")
+    await client.send_message(VIBECHAT_BOT, "🚫 Report")
     print(f"[{now()}] → Report (tracking interaction)")
     bot_state.total_interactions += 1
     bot_state.state = BotState.REPORTING
     await asyncio.sleep(2)
 
 async def select_report_other():
-    await app.send_message(VIBECHAT_BOT, "Other")
+    await client.send_message(VIBECHAT_BOT, "Other")
     print(f"[{now()}] → Selected 'Other' as report reason")
     print(f"[{now()}] 📊 Total interactions tracked: {bot_state.total_interactions}")
     bot_state.state = BotState.WAITING
@@ -325,7 +322,7 @@ async def auto_end_chat():
     ]
     bye_msg = random.choice(goodbyes)
 
-    await app.send_message(VIBECHAT_BOT, bye_msg)
+    await client.send_message(VIBECHAT_BOT, bye_msg)
     print(f"[{now()}] Auto-bye: {bye_msg}")
 
     await asyncio.sleep(3)
@@ -338,9 +335,9 @@ def now():
 # MESSAGE HANDLER
 # ═══════════════════════════════════════════════════════════════
 
-@app.on_message(filters.chat(VIBECHAT_BOT))
-async def handle_vibechat_message(client: Client, message: Message):
-    text = message.text or message.caption or ""
+@client.on(events.NewMessage(chats=VIBECHAT_BOT))
+async def handle_vibechat_message(event):
+    text = event.message.text or ""
     print(f"[{now()}] VibeChat: {text[:120]}")
 
     if bot_state.state == BotState.FINDING:
@@ -358,7 +355,7 @@ async def handle_vibechat_message(client: Client, message: Message):
                 "hii stranger 💕", "yo cutie 😘", "heyy 😋 whats good"
             ]
             opening = random.choice(openings)
-            await app.send_message(VIBECHAT_BOT, opening)
+            await client.send_message(VIBECHAT_BOT, opening)
             print(f"[{now()}] Opening: {opening}")
 
         elif "hunting for your vibe" in text.lower():
@@ -385,7 +382,7 @@ async def handle_vibechat_message(client: Client, message: Message):
         ai_response = await get_ai_response(text)
         bot_state.chat_history.append({"role": "assistant", "content": ai_response})
 
-        await app.send_message(VIBECHAT_BOT, ai_response)
+        await client.send_message(VIBECHAT_BOT, ai_response)
         print(f"[{now()}] AI: {ai_response[:80]}")
 
     elif bot_state.state == BotState.RATING:
@@ -411,18 +408,18 @@ async def auto_end_after_delay():
         await auto_end_chat()
 
 # ═══════════════════════════════════════════════════════════════
-# COMMANDS
+# COMMANDS (send to your own account)
 # ═══════════════════════════════════════════════════════════════
 
-@app.on_message(filters.private & filters.command("start") & filters.me)
-async def cmd_start(client: Client, message: Message):
-    await message.reply("🤖 Bot starting...")
-    await app.send_message(VIBECHAT_BOT, "/start")
+@client.on(events.NewMessage(pattern=r"/start", from_users="me"))
+async def cmd_start(event):
+    await event.reply("🤖 Bot starting...")
+    await client.send_message(VIBECHAT_BOT, "/start")
     await asyncio.sleep(3)
     await start_finding_vibe()
 
-@app.on_message(filters.private & filters.command("status") & filters.me)
-async def cmd_status(client: Client, message: Message):
+@client.on(events.NewMessage(pattern=r"/status", from_users="me"))
+async def cmd_status(event):
     duration = 0
     if bot_state.chat_start_time:
         duration = (datetime.now() - bot_state.chat_start_time).seconds // 60
@@ -433,17 +430,17 @@ async def cmd_status(client: Client, message: Message):
 • Chat duration: {duration} min
 • Total interactions: {bot_state.total_interactions}
 """
-    await message.reply(status)
+    await event.reply(status)
 
-@app.on_message(filters.private & filters.command("stop") & filters.me)
-async def cmd_stop(client: Client, message: Message):
+@client.on(events.NewMessage(pattern=r"/stop", from_users="me"))
+async def cmd_stop(event):
     bot_state.state = BotState.IDLE
     await send_stop()
-    await message.reply("🛑 Stopped.")
+    await event.reply("🛑 Stopped.")
 
-@app.on_message(filters.private & filters.command("stats") & filters.me)
-async def cmd_stats(client: Client, message: Message):
-    await message.reply(f"📊 Total users interacted with: {bot_state.total_interactions}")
+@client.on(events.NewMessage(pattern=r"/stats", from_users="me"))
+async def cmd_stats(event):
+    await event.reply(f"📊 Total users interacted with: {bot_state.total_interactions}")
 
 # ═══════════════════════════════════════════════════════════════
 # MAIN
@@ -451,7 +448,7 @@ async def cmd_stats(client: Client, message: Message):
 
 async def main():
     print("=" * 60)
-    print("  VibeChat AI Girl - Self-Test")
+    print("  VibeChat AI Girl - Self-Test (Telethon)")
     print("=" * 60)
 
     if not TELEGRAM_API_ID or not TELEGRAM_API_HASH:
@@ -466,14 +463,14 @@ async def main():
         print("⚠️ No AI keys! Using AI Horde only (very slow)")
         print("Get free keys: mistral.ai | groq.com")
 
-    await app.start()
-    print(f"✅ Logged in as {app.me.first_name}")
+    await client.start(phone=TELEGRAM_PHONE if not SESSION_STRING else None)
+    print(f"✅ Logged in as {(await client.get_me()).first_name}")
 
-    await app.send_message(VIBECHAT_BOT, "/start")
+    await client.send_message(VIBECHAT_BOT, "/start")
     await asyncio.sleep(3)
     await start_finding_vibe()
 
-    await asyncio.Event().wait()
+    await client.run_until_disconnected()
 
 if __name__ == "__main__":
-    app.run(main())
+    client.loop.run_until_complete(main())
