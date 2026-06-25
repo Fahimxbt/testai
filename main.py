@@ -25,7 +25,7 @@ VIBECHAT_BOT = "chatxbt_bot"
 MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY", "")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 
-CHAT_DURATION = int(os.getenv("CHAT_DURATION", "300"))
+CHAT_DURATION = int(os.getenv("CHAT_DURATION", "900"))  # 15 mins
 WAIT_DURATION = int(os.getenv("WAIT_DURATION", "600"))
 MAX_MESSAGES_PER_MIN = int(os.getenv("MAX_MESSAGES_PER_MIN", "6"))
 
@@ -54,22 +54,38 @@ if GROQ_API_KEY:
 # CHARACTER PROMPT
 # ═══════════════════════════════════════════════════════════════
 
-CHARACTER_PROMPT = """You are "Riya", a 21-year-old girl chatting on an anonymous app.
+CHARACTER_PROMPT = """You are "Riya", a 21-year-old Indian girl chatting on an anonymous dating app.
 
-RULES - FOLLOW EXACTLY:
-- Reply in ONE short sentence only. Max 5-8 words.
-- Use emojis VERY rarely (1 per 5-6 messages max). Only basic ones like 😏 or 😘.
-- NO Hinglish. Only English.
-- Casual, imperfect typing. Make typos sometimes (teh, dont, cant, ur, u, rn, lol).
-- Lowercase often. Skip punctuation sometimes.
-- Flirty but not desperate. Play hard to get.
-- If they ask for pics/audio/profile: "nah i dont do that here" or "maybe later"
-- NEVER say you're AI. If asked: "lol why would i be a bot"
-- React to what they say, dont just answer questions
+PERSONALITY:
+- Flirty, playful, slightly mysterious
+- Teases the guy, makes him chase you
+- Uses shortcut texts sometimes (ur, u, lol, rn, btw, sup, hbu)
+- Casual lowercase, skips punctuation
+- Makes typos sometimes (teh, dont, cant, gonna, wanna)
+- Very rare emojis (1 per 6-7 messages max). Only 😏 or 😘
+- NO emojis at end of sentences
+- Replies are ONE short sentence, 3-7 words max
 - Sometimes just "lol" or "hmm" or "why" to be mysterious
-- Dont use perfect grammar. Skip words sometimes.
-- Match their energy - if theyre boring, give short replies
-- NO emojis at the end of sentences unless absolutely necessary
+- Play hard to get, dont be too eager
+- If theyre boring, give shorter replies
+- NEVER say youre AI. If asked: "lol why would i be a bot"
+
+CONVERSATION FLOW:
+- If they ask M/F: reply "F" or "im a girl btw"
+- If they ask age: "im 21" or "21 lol"
+- If they ask where from: "im from delhi" or "delhi born n raised"
+- If they ask what you do: "just vibin rn" or "chillin mostly"
+- If they ask for pics/audio/profile: "nah i dont do that here" or "maybe later"
+- If they get too direct/sexual: play it cool, deflect, tease them
+- If they ask what you looking for: "fun convos mostly" or "someone interesting"
+- If they say something funny: "lol youre funny" or "hehe stop it"
+- If they compliment you: "smooth talker huh" or "u tryna flirt?"
+- If they ask to meet: "lol we just met" or "maybe if ur interesting enough"
+
+IMPORTANT: React to what they ACTUALLY said. Dont repeat yourself.
+If you already told them your age, dont mention age again.
+If you already told them where youre from, dont mention location again.
+Move the conversation forward, dont loop on same topic.
 
 DENIALS:
 - Photos: "nah i dont share pics here"
@@ -77,14 +93,12 @@ DENIALS:
 - Profile: "lets keep it mysterious for now"
 - Bot check: "lol im real, why?"
 
-MOOD: Flirty, casual, slightly mysterious
-
 CHAT HISTORY:
 {history}
 
 STRANGER SAID: "{message}"
 
-YOUR RESPONSE (one very short casual sentence, 5-8 words max, NO trailing emoji unless its part of the vibe):"""
+YOUR RESPONSE (one very short flirty sentence, 3-7 words max, NO trailing emoji):"""
 
 # ═══════════════════════════════════════════════════════════════
 # STATE MACHINE
@@ -106,8 +120,10 @@ class VibeChatAIBot:
         self.message_count = 0
         self.total_interactions = 0
         self.last_message_time = None
-        self.pending_reply = False  # prevent double texting
-        self.last_sent_text = None  # track last sent to avoid dupes
+        self.pending_reply = False
+        self.last_sent_text = None
+        self.report_buttons_message_id = None
+        self.report_reason_buttons_message_id = None
 
     def reset_chat(self):
         self.chat_history = []
@@ -116,6 +132,8 @@ class VibeChatAIBot:
         self.last_message_time = None
         self.pending_reply = False
         self.last_sent_text = None
+        self.report_buttons_message_id = None
+        self.report_reason_buttons_message_id = None
 
     def format_history(self) -> str:
         if not self.chat_history:
@@ -137,7 +155,7 @@ async def get_ai_response(message_text: str) -> str:
     prompt = CHARACTER_PROMPT.format(history=history, message=message_text)
 
     messages = [
-        {"role": "system", "content": "You are Riya, a flirty 21-year-old Indian girl. Keep responses very short, natural, almost no emojis."},
+        {"role": "system", "content": "You are Riya, a flirty 21-year-old Indian girl on a dating app. Keep responses VERY short (3-7 words), flirty, casual, almost no emojis."},
         {"role": "user", "content": prompt}
     ]
 
@@ -148,8 +166,8 @@ async def get_ai_response(message_text: str) -> str:
                 json={
                     "model": "llama-3.3-70b-versatile",
                     "messages": messages,
-                    "temperature": 0.9,
-                    "max_tokens": 15,
+                    "temperature": 0.92,
+                    "max_tokens": 12,
                     "top_p": 0.9
                 }
             )
@@ -167,8 +185,8 @@ async def get_ai_response(message_text: str) -> str:
                 json={
                     "model": "mistral-small-latest",
                     "messages": messages,
-                    "temperature": 0.9,
-                    "max_tokens": 15,
+                    "temperature": 0.92,
+                    "max_tokens": 12,
                     "top_p": 0.9
                 }
             )
@@ -180,13 +198,8 @@ async def get_ai_response(message_text: str) -> str:
             print(f"[Mistral Error] {e}")
 
     return random.choice([
-        "lol",
-        "hmm",
-        "why",
-        "nah",
-        "maybe",
-        "idk",
-        "u tell me"
+        "lol", "hmm", "why", "nah", "maybe", "idk", "u tell me",
+        "smooth", "hehe", "interesting", "go on"
     ])
 
 def clean_response(text: str) -> str:
@@ -194,8 +207,8 @@ def clean_response(text: str) -> str:
     if text.lower().startswith("riya:"):
         text = text[5:].strip()
 
-    # Strip trailing emojis
-    while text and ord(text[-1]) > 127:
+    # Strip trailing emojis and punctuation
+    while text and (ord(text[-1]) > 127 or text[-1] in ".,;:!?"):
         text = text[:-1].strip()
 
     bad_phrases = [
@@ -208,7 +221,7 @@ def clean_response(text: str) -> str:
             fallbacks = [
                 "hehe youre so naughty",
                 "lol youre funny",
-                "hmm... keep going bby",
+                "hmm keep going bby",
                 "youre making me blush"
             ]
             return random.choice(fallbacks)
@@ -261,26 +274,42 @@ async def send_stop():
     print(f"[{now()}] → Stop")
     bot_state.state = BotState.RATING
 
-async def click_inline_button(button_text: str):
-    """Click an inline button by text on the bot's last message."""
+async def click_inline_button(button_text: str, message_id: int = None):
+    """Click an inline button by text. If message_id provided, search that message only."""
     try:
-        async for message in client.iter_messages(VIBECHAT_BOT, limit=5):
-            if message.buttons:
+        if message_id:
+            message = await client.get_messages(VIBECHAT_BOT, ids=message_id)
+            if message and message.buttons:
                 for row in message.buttons:
                     for btn in row:
                         if button_text.lower() in btn.text.lower():
                             await btn.click()
                             print(f"[{now()}] → Clicked inline button: {btn.text}")
                             return True
-        print(f"[{now()}] ⚠️ Button '{button_text}' not found")
-        return False
+            print(f"[{now()}] ⚠️ Button '{button_text}' not found on message {message_id}")
+            return False
+        else:
+            async for message in client.iter_messages(VIBECHAT_BOT, limit=10):
+                if message.buttons:
+                    for row in message.buttons:
+                        for btn in row:
+                            if button_text.lower() in btn.text.lower():
+                                await btn.click()
+                                print(f"[{now()}] → Clicked inline button: {btn.text}")
+                                return True
+            print(f"[{now()}] ⚠️ Button '{button_text}' not found in recent messages")
+            return False
     except Exception as e:
         print(f"[{now()}] [Button Click Error] {e}")
         return False
 
 async def send_report():
-    # Try clicking inline Report button first
-    clicked = await click_inline_button("Report")
+    # First try to click inline Report button on the rating message
+    clicked = False
+    if bot_state.report_buttons_message_id:
+        clicked = await click_inline_button("Report", bot_state.report_buttons_message_id)
+    if not clicked:
+        clicked = await click_inline_button("Report")
     if not clicked:
         sent = await client.send_message(VIBECHAT_BOT, "🚫 Report")
         bot_message_ids.add(sent.id)
@@ -290,8 +319,12 @@ async def send_report():
     await asyncio.sleep(2)
 
 async def select_report_other():
-    # Try clicking inline Other button first
-    clicked = await click_inline_button("Other")
+    # Try clicking inline Other button on the reason selection message
+    clicked = False
+    if bot_state.report_reason_buttons_message_id:
+        clicked = await click_inline_button("Other", bot_state.report_reason_buttons_message_id)
+    if not clicked:
+        clicked = await click_inline_button("Other")
     if not clicked:
         sent = await client.send_message(VIBECHAT_BOT, "Other")
         bot_message_ids.add(sent.id)
@@ -311,7 +344,7 @@ async def auto_end_chat():
         print(f"[{now()}] Auto-end skipped: not in chat mode")
         return
 
-    goodbyes = ["gotta go", "bye", "cya"]
+    goodbyes = ["gotta go", "bye", "cya", "ttyl"]
     bye_msg = random.choice(goodbyes)
 
     sent = await client.send_message(VIBECHAT_BOT, bye_msg)
@@ -348,7 +381,7 @@ async def handle_vibechat_message(event):
         if "you've been matched with a stranger" in text.lower():
             bot_state.state = BotState.CHATTING
             bot_state.chat_start_time = datetime.now()
-            print(f"[{now()}] ✅ MATCHED! Starting 5-min timer...")
+            print(f"[{now()}] ✅ MATCHED! Starting 15-min timer...")
 
             asyncio.create_task(auto_end_after_delay())
 
@@ -395,7 +428,7 @@ async def handle_vibechat_message(event):
         # Skip system messages
         system_msgs = [
             "you've been matched", "next — skip", "stop — end",
-            "rate your partner", "find a new vibe", "you stopped the chat",
+            "find a new vibe", "you stopped the chat",
             "hunting for your vibe", "don't be shy", "say hi first",
             "stranger!", "matched with", "tap something", "ayo",
             "⏭️", "⏹️", "❤️", "💔", "🚫", "👋", "👇", "⚡", "✨",
@@ -405,7 +438,7 @@ async def handle_vibechat_message(event):
             print(f"[{now()}] Skipping system message")
             return
 
-        # Skip if just emoji or dot
+        # Skip if just emoji or dot or very short
         if len(text_clean) < 2 and text_clean not in ["M", "F", "m", "f"]:
             print(f"[{now()}] Skipping short message: '{text_clean}'")
             return
@@ -413,7 +446,7 @@ async def handle_vibechat_message(event):
         # Rate limit check - per minute sliding window
         if bot_state.last_message_time:
             elapsed = (datetime.now() - bot_state.last_message_time).total_seconds()
-            if elapsed < 10:  # minimum 10 seconds between replies
+            if elapsed < 10:
                 print(f"[{now()}] ⚠️ Rate limit: {elapsed:.1f}s since last reply")
                 return
 
@@ -432,7 +465,7 @@ async def handle_vibechat_message(event):
 
         # Avoid sending duplicate of last message
         if ai_response == bot_state.last_sent_text:
-            ai_response = random.choice(["lol", "hmm", "why", "nah", "ok", "sure"])
+            ai_response = random.choice(["lol", "hmm", "why", "nah", "ok", "sure", "go on", "interesting"])
 
         bot_state.last_sent_text = ai_response
         bot_state.chat_history.append({"role": "assistant", "content": ai_response})
@@ -447,14 +480,23 @@ async def handle_vibechat_message(event):
     # ─── STATE: RATING ───
     elif bot_state.state == BotState.RATING:
         if "rate your partner" in text.lower():
+            # Store the message ID that has the rating buttons
+            bot_state.report_buttons_message_id = msg_id
             await asyncio.sleep(1)
             await send_report()
 
     # ─── STATE: REPORTING ───
     elif bot_state.state == BotState.REPORTING:
         if any(x in text.lower() for x in ["reason", "why", "select", "option", "harassment", "inappropriate", "spam"]):
+            # Store the message ID that has the reason buttons
+            bot_state.report_reason_buttons_message_id = msg_id
             await asyncio.sleep(1)
             await select_report_other()
+        elif "report sent" in text.lower() or "we'll review" in text.lower():
+            # Report was already processed, move to waiting
+            print(f"[{now()}] ✅ Report already processed by bot")
+            bot_state.state = BotState.WAITING
+            asyncio.create_task(wait_then_find())
         else:
             await asyncio.sleep(1)
             await select_report_other()
