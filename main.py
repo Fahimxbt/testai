@@ -278,6 +278,8 @@ async def start_finding_vibe():
     bot_state.reset_chat()
     bot_state.message_count = 0
     bot_message_ids.clear()
+    global last_reply_time
+    last_reply_time = None
     sent = await client.send_message(VIBECHAT_BOT, "⚡ Find a Vibe")
     bot_message_ids.add(sent.id)
     print(f"[{now()}] → Find a Vibe")
@@ -314,18 +316,20 @@ async def select_report_other():
 async def wait_then_find():
     print(f"[{now()}] ⏳ Waiting {WAIT_DURATION}s before next match...")
     await asyncio.sleep(WAIT_DURATION)
+    bot_state.state = BotState.IDLE  # Reset state before finding
     await start_finding_vibe()
 
 async def auto_end_chat():
     if bot_state.state != BotState.CHATTING:
+        print(f"[{now()}] Auto-end skipped: not in chat mode")
         return
 
     goodbyes = [
-        "gotta go now, was fun",
-        "i need to run, bye",
-        "my phones dying, bye",
-        "gotta sleep, bye",
-        "ok im leaving, bye"
+        "gotta go",
+        "im leaving",
+        "bye",
+        "cya",
+        "laters"
     ]
     bye_msg = random.choice(goodbyes)
 
@@ -333,8 +337,9 @@ async def auto_end_chat():
     bot_message_ids.add(sent.id)
     print(f"[{now()}] Auto-bye: {bye_msg}")
 
-    await asyncio.sleep(3)
-    await send_stop()
+    await asyncio.sleep(2)
+    if bot_state.state == BotState.CHATTING:
+        await send_stop()
 
 def now():
     return datetime.now().strftime("%H:%M:%S")
@@ -400,8 +405,9 @@ async def handle_vibechat_message(event):
             print(f"[{now()}] Skipping system message")
             return
 
-        # Skip if message is too short (likely a button tap or emoji)
-        if len(text.strip()) < 2:
+        # Skip if message is too short (but allow M/F/gender replies)
+        text_stripped = text.strip()
+        if len(text_stripped) < 2 and text_stripped.lower() not in ["m", "f", "f", "m"]:
             print(f"[{now()}] Skipping short message")
             return
 
