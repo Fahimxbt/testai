@@ -405,6 +405,11 @@ async def handle_vibechat_message(event):
             print(f"[{now()}] Skipping short message")
             return
 
+        # Detect if user is asking M/F or asl - add context to history
+        user_msg_lower = text.lower().strip()
+        if user_msg_lower in ["m or f", "m/f", "male or female", "asl", "m/f?"]:
+            print(f"[{now()}] Detected M/F or ASL question")
+
         # Skip if we just replied (cooldown)
         if last_reply_time and (datetime.now() - last_reply_time).seconds < 3:
             print(f"[{now()}] Cooldown active, skipping")
