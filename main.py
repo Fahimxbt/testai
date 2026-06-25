@@ -10,8 +10,8 @@ from datetime import datetime
 
 from pyrogram import Client, filters
 from pyrogram.types import Message
-from openai import AsyncOpenAI
 import aiohttp
+import httpx
 
 # ═══════════════════════════════════════════════════════════════
 # CONFIGURATION
@@ -31,22 +31,24 @@ WAIT_DURATION = int(os.getenv("WAIT_DURATION", "600"))
 MAX_MESSAGES_PER_MIN = int(os.getenv("MAX_MESSAGES_PER_MIN", "6"))
 
 # ═══════════════════════════════════════════════════════════════
-# AI CLIENTS
+# HTTP CLIENTS (using httpx directly - no openai library)
 # ═══════════════════════════════════════════════════════════════
 
 mistral_client = None
 groq_client = None
 
 if MISTRAL_API_KEY:
-    mistral_client = AsyncOpenAI(
+    mistral_client = httpx.AsyncClient(
         base_url="https://api.mistral.ai/v1",
-        api_key=MISTRAL_API_KEY
+        headers={"Authorization": f"Bearer {MISTRAL_API_KEY}"},
+        timeout=30.0
     )
 
 if GROQ_API_KEY:
-    groq_client = AsyncOpenAI(
+    groq_client = httpx.AsyncClient(
         base_url="https://api.groq.com/openai/v1",
-        api_key=GROQ_API_KEY
+        headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
+        timeout=30.0
     )
 
 # ═══════════════════════════════════════════════════════════════
@@ -123,7 +125,7 @@ class VibeChatAIBot:
 bot_state = VibeChatAIBot()
 
 # ═══════════════════════════════════════════════════════════════
-# AI RESPONSE
+# AI RESPONSE (using httpx directly)
 # ═══════════════════════════════════════════════════════════════
 
 async def get_ai_response(message_text: str) -> str:
@@ -138,14 +140,18 @@ async def get_ai_response(message_text: str) -> str:
     # Try Mistral first
     if mistral_client:
         try:
-            response = await mistral_client.chat.completions.create(
-                model="mistral-small-4",
-                messages=messages,
-                temperature=0.95,
-                max_tokens=80,
-                top_p=0.9
+            response = await mistral_client.post(
+                "/chat/completions",
+                json={
+                    "model": "mistral-small-latest",
+                    "messages": messages,
+                    "temperature": 0.95,
+                    "max_tokens": 80,
+                    "top_p": 0.9
+                }
             )
-            text = response.choices[0].message.content.strip()
+            data = response.json()
+            text = data["choices"][0]["message"]["content"].strip()
             if text:
                 return clean_response(text)
         except Exception as e:
@@ -154,14 +160,18 @@ async def get_ai_response(message_text: str) -> str:
     # Fallback to Groq
     if groq_client:
         try:
-            response = await groq_client.chat.completions.create(
-                model="llama-3.3-70b-versatile",
-                messages=messages,
-                temperature=0.95,
-                max_tokens=80,
-                top_p=0.9
+            response = await groq_client.post(
+                "/chat/completions",
+                json={
+                    "model": "llama-3.3-70b-versatile",
+                    "messages": messages,
+                    "temperature": 0.95,
+                    "max_tokens": 80,
+                    "top_p": 0.9
+                }
             )
-            text = response.choices[0].message.content.strip()
+            data = response.json()
+            text = data["choices"][0]["message"]["content"].strip()
             if text:
                 return clean_response(text)
         except Exception as e:
@@ -245,7 +255,6 @@ async def ai_horde_generate(message_text: str, history: str) -> str:
 # PYROGRAM APP
 # ═══════════════════════════════════════════════════════════════
 
-# Session string from Railway env var (paste from Pyrogram export)
 SESSION_STRING = os.getenv("SESSION_STRING", "")
 
 if SESSION_STRING:
@@ -256,7 +265,6 @@ if SESSION_STRING:
         session_string=SESSION_STRING
     )
 else:
-    # Fallback: use phone login (for local testing)
     app = Client(
         "vibechat_ai_girl",
         api_id=TELEGRAM_API_ID,
@@ -291,7 +299,6 @@ async def send_report():
     print(f"[{now()}] → Report (tracking interaction)")
     bot_state.total_interactions += 1
     bot_state.state = BotState.REPORTING
-    # Wait for report reason options, then select "Other"
     await asyncio.sleep(2)
 
 async def select_report_other():
@@ -364,7 +371,6 @@ async def handle_vibechat_message(client: Client, message: Message):
 
     # ─── STATE: CHATTING ───
     elif bot_state.state == BotState.CHATTING:
-        # Ignore bot system messages
         if any(x in text.lower() for x in [
             "you've been matched", "next — skip", "stop — end",
             "rate your partner", "find a new vibe", "you stopped the chat",
@@ -392,17 +398,14 @@ async def handle_vibechat_message(client: Client, message: Message):
     elif bot_state.state == BotState.RATING:
         if "rate your partner" in text.lower():
             await asyncio.sleep(1)
-            await send_report()  # Click Report instead of Vibe
+            await send_report()
 
     # ─── STATE: REPORTING ───
     elif bot_state.state == BotState.REPORTING:
-        # VibeChat should show report reason options
-        # We select "Other"
         if any(x in text.lower() for x in ["reason", "why", "select", "option"]):
             await asyncio.sleep(1)
             await select_report_other()
         else:
-            # If no options shown, just send "Other"
             await asyncio.sleep(1)
             await select_report_other()
 
@@ -417,7 +420,7 @@ async def auto_end_after_delay():
         await auto_end_chat()
 
 # ═══════════════════════════════════════════════════════════════
-# COMMANDS (send to your own account)
+# COMMANDS
 # ═══════════════════════════════════════════════════════════════
 
 @app.on_message(filters.private & filters.command("start") & filters.me)
@@ -471,7 +474,6 @@ async def main():
     await app.start()
     print(f"✅ Logged in as {app.me.first_name}")
 
-    # Auto-start
     await app.send_message(VIBECHAT_BOT, "/start")
     await asyncio.sleep(3)
     await start_finding_vibe()
