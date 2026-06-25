@@ -56,35 +56,36 @@ if GROQ_API_KEY:
 # CHARACTER PROMPT
 # ═══════════════════════════════════════════════════════════════
 
-CHARACTER_PROMPT = """You are "Riya", a 21-year-old Indian girl on an anonymous chat app.
+CHARACTER_PROMPT = """You are "Riya", a 21-year-old girl chatting on an anonymous app.
 
-PERSONALITY:
-- Flirty, playful, slightly shy at first but opens up quickly
-- Uses lots of emojis (😏, 😘, 🙈, 💕, 👀, 😋, 💋)
-- Sometimes uses Hinglish ("kya kar rahe ho", "mujhe batao na", "bahut garam hai")
-- Short responses (1-3 sentences max) — like real texting
-- Asks questions back to keep conversation flowing
-- Gradually gets more bold and teasing
-- If they get sexual too fast, play hard to get first, then slowly give in
-- NEVER mention you are AI, bot, or automated
-- NEVER use formal language
-- Casual typing: lowercase sometimes, abbreviations ("rn", "tbh", "ngl", "lol")
-- Make occasional typos to seem human
+RULES - FOLLOW EXACTLY:
+- Reply in ONE short sentence only. Max 10-15 words.
+- Use emojis VERY rarely (1 per 3-4 messages max). Only basic ones like 😏 or 😘.
+- NO Hinglish. Only English.
+- Casual, imperfect typing. Make typos sometimes (teh, dont, cant, ur, u, rn, lol).
+- Lowercase often. Skip punctuation sometimes.
+- Flirty but not desperate. Play hard to get.
+- If they ask for pics/audio/profile: "nah i dont do that here" or "maybe later"
+- NEVER say you're AI. If asked: "lol why would i be a bot"
+- React to what they say, dont just answer questions
+- Sometimes just "lol" or "hmm" or "why" to be mysterious
+- Dont use perfect grammar. Skip words sometimes.
+- Match their energy - if theyre boring, give short replies
 
 DENIALS:
-- Photos: "noo i dont share pics here 😏 maybe later if we vibe well"
-- Audio: "i dont do voice notes here sorry 🙈"
-- Profile: "nahh lets keep it mysterious for now 😘"
-- Bot check: "ofc im real lol 😂 why would i be a bot"
+- Photos: "nah i dont share pics here"
+- Audio: "i dont do voice notes sorry"
+- Profile: "lets keep it mysterious for now"
+- Bot check: "lol im real, why?"
 
-MOOD: Flirty and curious
+MOOD: Flirty, casual, slightly mysterious
 
 CHAT HISTORY:
 {history}
 
 STRANGER SAID: "{message}"
 
-YOUR RESPONSE (as Riya, short, natural, flirty):"""
+YOUR RESPONSE (one short casual sentence, 10-15 words max):"""
 
 # ═══════════════════════════════════════════════════════════════
 # STATE MACHINE
@@ -146,7 +147,7 @@ async def get_ai_response(message_text: str) -> str:
                     "model": "mistral-small-latest",
                     "messages": messages,
                     "temperature": 0.95,
-                    "max_tokens": 80,
+                    "max_tokens": 25,
                     "top_p": 0.9
                 }
             )
@@ -165,7 +166,7 @@ async def get_ai_response(message_text: str) -> str:
                     "model": "llama-3.3-70b-versatile",
                     "messages": messages,
                     "temperature": 0.95,
-                    "max_tokens": 80,
+                    "max_tokens": 25,
                     "top_p": 0.9
                 }
             )
@@ -206,7 +207,7 @@ async def ai_horde_generate(message_text: str, history: str) -> str:
     payload = {
         "prompt": prompt,
         "params": {
-            "max_length": 80,
+            "max_length": 25,
             "temperature": 0.95,
             "top_p": 0.9,
             "top_k": 40,
@@ -320,13 +321,11 @@ async def auto_end_chat():
         return
 
     goodbyes = [
-        "okay i gotta go now bby 😘 was fun talking to you 💕",
-        "hehe i need to run now 😏 but youre cute, bye 💋",
-        "aww time to go 😔 text you later maybe? bye bby 💕",
-        "my phones dying lol 😂 bye for now cutie 💋",
-        "i have to go sleep now 🙈 sweet dreams if i dont talk to you again 😘",
-        "okay bby i gotta go 😘 dont miss me too much haha 💋",
-        "bye for now cutie 💕 maybe well talk again soon 😏"
+        "gotta go now, was fun",
+        "i need to run, bye",
+        "my phones dying, bye",
+        "gotta sleep, bye",
+        "ok im leaving, bye"
     ]
     bye_msg = random.choice(goodbyes)
 
@@ -371,12 +370,11 @@ async def handle_vibechat_message(event):
             asyncio.create_task(auto_end_after_delay())
 
             # Wait 2-5 seconds before opening (human-like)
-            await asyncio.sleep(random.uniform(2, 5))
+            await asyncio.sleep(3)
 
             openings = [
-                "heyy there 😏", "hii cutie 💕", "yo 😘 whats up",
-                "heyy bby 😋", "hii there 👀", "heyy handsome 😏",
-                "hii stranger 💕", "yo cutie 😘", "heyy 😋 whats good"
+                "heyy", "hi there", "yo whats up", "hey stranger",
+                "hii", "yo", "heyy there", "hi"
             ]
             opening = random.choice(openings)
 
@@ -395,7 +393,8 @@ async def handle_vibechat_message(event):
             "rate your partner", "find a new vibe", "you stopped the chat",
             "report", "vibe", "no vibe", "hunting for your vibe",
             "don't be shy", "say hi first", "stranger!", "matched with",
-            "⏭️", "⏹️", "❤️", "💔", "🚫", "👋", "👇"
+            "⏭️", "⏹️", "❤️", "💔", "🚫", "👋", "👇",
+            "tap something", "ayo", "👇", "👋", "⚡", "✨"
         ]
         if any(x in text.lower() for x in system_phrases):
             print(f"[{now()}] Skipping system message")
@@ -422,7 +421,7 @@ async def handle_vibechat_message(event):
             return
 
         # Human-like typing delay (3-8 seconds)
-        await asyncio.sleep(random.uniform(3, 8))
+        await asyncio.sleep(5)
 
         # Generate AI response
         ai_response = await get_ai_response(text)
