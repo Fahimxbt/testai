@@ -464,7 +464,10 @@ async def main():
         print("⚠️ No AI keys! Using AI Horde only (very slow)")
         print("Get free keys: mistral.ai | groq.com")
 
-    await client.start(phone=TELEGRAM_PHONE if not SESSION_STRING else None)
+    if SESSION_STRING:
+        await client.start()
+    else:
+        await client.start(phone=TELEGRAM_PHONE)
     print(f"✅ Logged in as {(await client.get_me()).first_name}")
 
     await client.send_message(VIBECHAT_BOT, "/start")
