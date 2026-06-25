@@ -275,29 +275,36 @@ else:
 async def start_finding_vibe():
     bot_state.state = BotState.FINDING
     bot_state.reset_chat()
-    await client.send_message(VIBECHAT_BOT, "⚡ Find a Vibe")
+    bot_state.message_count = 0
+    bot_message_ids.clear()
+    sent = await client.send_message(VIBECHAT_BOT, "⚡ Find a Vibe")
+    bot_message_ids.add(sent.id)
     print(f"[{now()}] → Find a Vibe")
 
 async def send_next():
-    await client.send_message(VIBECHAT_BOT, "⏭️ Next")
+    sent = await client.send_message(VIBECHAT_BOT, "⏭️ Next")
+    bot_message_ids.add(sent.id)
     print(f"[{now()}] → Next")
     bot_state.state = BotState.FINDING
     bot_state.reset_chat()
 
 async def send_stop():
-    await client.send_message(VIBECHAT_BOT, "⏹️ Stop")
+    sent = await client.send_message(VIBECHAT_BOT, "⏹️ Stop")
+    bot_message_ids.add(sent.id)
     print(f"[{now()}] → Stop")
     bot_state.state = BotState.RATING
 
 async def send_report():
-    await client.send_message(VIBECHAT_BOT, "🚫 Report")
+    sent = await client.send_message(VIBECHAT_BOT, "🚫 Report")
+    bot_message_ids.add(sent.id)
     print(f"[{now()}] → Report (tracking interaction)")
     bot_state.total_interactions += 1
     bot_state.state = BotState.REPORTING
     await asyncio.sleep(2)
 
 async def select_report_other():
-    await client.send_message(VIBECHAT_BOT, "Other")
+    sent = await client.send_message(VIBECHAT_BOT, "Other")
+    bot_message_ids.add(sent.id)
     print(f"[{now()}] → Selected 'Other' as report reason")
     print(f"[{now()}] 📊 Total interactions tracked: {bot_state.total_interactions}")
     bot_state.state = BotState.WAITING
@@ -323,7 +330,8 @@ async def auto_end_chat():
     ]
     bye_msg = random.choice(goodbyes)
 
-    await client.send_message(VIBECHAT_BOT, bye_msg)
+    sent = await client.send_message(VIBECHAT_BOT, bye_msg)
+    bot_message_ids.add(sent.id)
     print(f"[{now()}] Auto-bye: {bye_msg}")
 
     await asyncio.sleep(3)
@@ -336,11 +344,24 @@ def now():
 # MESSAGE HANDLER
 # ═══════════════════════════════════════════════════════════════
 
+# Track bot's own message IDs to avoid replying to itself
+bot_message_ids = set()
+last_reply_time = None
+
 @client.on(events.NewMessage(chats=VIBECHAT_BOT))
 async def handle_vibechat_message(event):
+    global last_reply_time
+
     text = event.message.text or ""
+    msg_id = event.message.id
+
+    # Skip if this is our own message
+    if msg_id in bot_message_ids:
+        return
+
     print(f"[{now()}] VibeChat: {text[:120]}")
 
+    # ─── STATE: FINDING ───
     if bot_state.state == BotState.FINDING:
         if "you've been matched with a stranger" in text.lower():
             bot_state.state = BotState.CHATTING
@@ -349,48 +370,78 @@ async def handle_vibechat_message(event):
 
             asyncio.create_task(auto_end_after_delay())
 
-            await asyncio.sleep(2)
+            # Wait 2-5 seconds before opening (human-like)
+            await asyncio.sleep(random.uniform(2, 5))
+
             openings = [
                 "heyy there 😏", "hii cutie 💕", "yo 😘 whats up",
                 "heyy bby 😋", "hii there 👀", "heyy handsome 😏",
                 "hii stranger 💕", "yo cutie 😘", "heyy 😋 whats good"
             ]
             opening = random.choice(openings)
-            await client.send_message(VIBECHAT_BOT, opening)
+
+            sent = await client.send_message(VIBECHAT_BOT, opening)
+            bot_message_ids.add(sent.id)
             print(f"[{now()}] Opening: {opening}")
 
         elif "hunting for your vibe" in text.lower():
             print(f"[{now()}] 🔍 Searching...")
 
+    # ─── STATE: CHATTING ───
     elif bot_state.state == BotState.CHATTING:
-        if any(x in text.lower() for x in [
+        # Skip ALL system messages from VibeChat bot
+        system_phrases = [
             "you've been matched", "next — skip", "stop — end",
             "rate your partner", "find a new vibe", "you stopped the chat",
-            "report", "vibe", "no vibe"
-        ]):
+            "report", "vibe", "no vibe", "hunting for your vibe",
+            "don't be shy", "say hi first", "stranger!", "matched with",
+            "⏭️", "⏹️", "❤️", "💔", "🚫", "👋", "👇"
+        ]
+        if any(x in text.lower() for x in system_phrases):
+            print(f"[{now()}] Skipping system message")
             return
 
+        # Skip if message is too short (likely a button tap or emoji)
+        if len(text.strip()) < 2:
+            print(f"[{now()}] Skipping short message")
+            return
+
+        # Skip if we just replied (cooldown)
+        if last_reply_time and (datetime.now() - last_reply_time).seconds < 3:
+            print(f"[{now()}] Cooldown active, skipping")
+            return
+
+        # Add to history
         bot_state.chat_history.append({"role": "user", "content": text})
         bot_state.message_count += 1
         bot_state.last_message_time = datetime.now()
 
+        # Rate limit check
         if bot_state.message_count > MAX_MESSAGES_PER_MIN:
             print(f"[{now()}] ⚠️ Rate limit hit")
             return
 
-        await asyncio.sleep(random.uniform(1.0, 3.0))
+        # Human-like typing delay (3-8 seconds)
+        await asyncio.sleep(random.uniform(3, 8))
 
+        # Generate AI response
         ai_response = await get_ai_response(text)
         bot_state.chat_history.append({"role": "assistant", "content": ai_response})
 
-        await client.send_message(VIBECHAT_BOT, ai_response)
+        # Send and track our message
+        sent = await client.send_message(VIBECHAT_BOT, ai_response)
+        bot_message_ids.add(sent.id)
+        last_reply_time = datetime.now()
+
         print(f"[{now()}] AI: {ai_response[:80]}")
 
+    # ─── STATE: RATING ───
     elif bot_state.state == BotState.RATING:
         if "rate your partner" in text.lower():
             await asyncio.sleep(1)
             await send_report()
 
+    # ─── STATE: REPORTING ───
     elif bot_state.state == BotState.REPORTING:
         if any(x in text.lower() for x in ["reason", "why", "select", "option"]):
             await asyncio.sleep(1)
@@ -399,6 +450,7 @@ async def handle_vibechat_message(event):
             await asyncio.sleep(1)
             await select_report_other()
 
+    # ─── STATE: WAITING ───
     elif bot_state.state == BotState.WAITING:
         if "find a new vibe" in text.lower():
             print(f"[{now()}] 🔄 Ready for next cycle")
