@@ -106,13 +106,13 @@ class VibeChatAIBot:
         self.total_interactions = 0
         self.last_message_time = None
         self.skip_timer = None
-
+        
     def reset_chat(self):
         self.chat_history = []
         self.chat_start_time = None
         self.message_count = 0
         self.last_message_time = None
-
+        
     def format_history(self) -> str:
         if not self.chat_history:
             return "(Just started chatting)"
@@ -131,12 +131,12 @@ bot_state = VibeChatAIBot()
 async def get_ai_response(message_text: str) -> str:
     history = bot_state.format_history()
     prompt = CHARACTER_PROMPT.format(history=history, message=message_text)
-
+    
     messages = [
         {"role": "system", "content": "You are Riya, a flirty 21-year-old Indian girl. Keep responses short, natural, use emojis."},
         {"role": "user", "content": prompt}
     ]
-
+    
     # Try Mistral first
     if mistral_client:
         try:
@@ -156,7 +156,7 @@ async def get_ai_response(message_text: str) -> str:
                 return clean_response(text)
         except Exception as e:
             print(f"[Mistral Error] {e}")
-
+    
     # Fallback to Groq
     if groq_client:
         try:
@@ -176,7 +176,7 @@ async def get_ai_response(message_text: str) -> str:
                 return clean_response(text)
         except Exception as e:
             print(f"[Groq Error] {e}")
-
+    
     # Emergency: AI Horde
     return await ai_horde_generate(message_text, history)
 
@@ -184,7 +184,7 @@ def clean_response(text: str) -> str:
     text = text.strip().strip('"').strip("'")
     if text.lower().startswith("riya:"):
         text = text[5:].strip()
-
+    
     bad_phrases = [
         "as an ai", "i'm an ai", "i am an ai", "as a language model",
         "i cannot", "i can't engage", "i'm not able to", "i apologize",
@@ -199,12 +199,12 @@ def clean_response(text: str) -> str:
                 "youre making me blush 🙈"
             ]
             return random.choice(fallbacks)
-
+    
     return text
 
 async def ai_horde_generate(message_text: str, history: str) -> str:
     prompt = f"{history}\nStranger: {message_text}\nRiya:"
-
+    
     payload = {
         "prompt": prompt,
         "params": {
@@ -218,7 +218,7 @@ async def ai_horde_generate(message_text: str, history: str) -> str:
         "trusted_workers": True,
         "api_key": AI_HORDE_KEY
     }
-
+    
     try:
         async with aiohttp.ClientSession() as session:
             async with session.post(
@@ -228,10 +228,10 @@ async def ai_horde_generate(message_text: str, history: str) -> str:
             ) as resp:
                 data = await resp.json()
                 job_id = data.get("id")
-
+                
                 if not job_id:
                     return "hmm... 😏"
-
+                
                 for _ in range(30):
                     await asyncio.sleep(2)
                     async with session.get(
@@ -245,7 +245,7 @@ async def ai_horde_generate(message_text: str, history: str) -> str:
                                 text = generations[0].get("text", "").strip()
                                 return clean_response(text)
                             break
-
+                
                 return "hehe 😏"
     except Exception as e:
         print(f"[AI Horde Error] {e}")
@@ -317,7 +317,7 @@ async def wait_then_find():
 async def auto_end_chat():
     if bot_state.state != BotState.CHATTING:
         return
-
+    
     goodbyes = [
         "okay i gotta go now bby 😘 was fun talking to you 💕",
         "hehe i need to run now 😏 but youre cute, bye 💋",
@@ -328,10 +328,10 @@ async def auto_end_chat():
         "bye for now cutie 💕 maybe well talk again soon 😏"
     ]
     bye_msg = random.choice(goodbyes)
-
+    
     await app.send_message(VIBECHAT_BOT, bye_msg)
     print(f"[{now()}] Auto-bye: {bye_msg}")
-
+    
     await asyncio.sleep(3)
     await send_stop()
 
@@ -346,16 +346,16 @@ def now():
 async def handle_vibechat_message(client: Client, message: Message):
     text = message.text or message.caption or ""
     print(f"[{now()}] VibeChat: {text[:120]}")
-
+    
     # ─── STATE: FINDING ───
     if bot_state.state == BotState.FINDING:
         if "you've been matched with a stranger" in text.lower():
             bot_state.state = BotState.CHATTING
             bot_state.chat_start_time = datetime.now()
             print(f"[{now()}] ✅ MATCHED! Starting 5-min timer...")
-
+            
             asyncio.create_task(auto_end_after_delay())
-
+            
             await asyncio.sleep(2)
             openings = [
                 "heyy there 😏", "hii cutie 💕", "yo 😘 whats up",
@@ -365,10 +365,10 @@ async def handle_vibechat_message(client: Client, message: Message):
             opening = random.choice(openings)
             await app.send_message(VIBECHAT_BOT, opening)
             print(f"[{now()}] Opening: {opening}")
-
+            
         elif "hunting for your vibe" in text.lower():
             print(f"[{now()}] 🔍 Searching...")
-
+    
     # ─── STATE: CHATTING ───
     elif bot_state.state == BotState.CHATTING:
         if any(x in text.lower() for x in [
@@ -377,29 +377,29 @@ async def handle_vibechat_message(client: Client, message: Message):
             "report", "vibe", "no vibe"
         ]):
             return
-
+        
         bot_state.chat_history.append({"role": "user", "content": text})
         bot_state.message_count += 1
         bot_state.last_message_time = datetime.now()
-
+        
         if bot_state.message_count > MAX_MESSAGES_PER_MIN:
             print(f"[{now()}] ⚠️ Rate limit hit")
             return
-
+        
         await asyncio.sleep(random.uniform(1.0, 3.0))
-
+        
         ai_response = await get_ai_response(text)
         bot_state.chat_history.append({"role": "assistant", "content": ai_response})
-
+        
         await app.send_message(VIBECHAT_BOT, ai_response)
         print(f"[{now()}] AI: {ai_response[:80]}")
-
+    
     # ─── STATE: RATING ───
     elif bot_state.state == BotState.RATING:
         if "rate your partner" in text.lower():
             await asyncio.sleep(1)
             await send_report()
-
+    
     # ─── STATE: REPORTING ───
     elif bot_state.state == BotState.REPORTING:
         if any(x in text.lower() for x in ["reason", "why", "select", "option"]):
@@ -408,7 +408,7 @@ async def handle_vibechat_message(client: Client, message: Message):
         else:
             await asyncio.sleep(1)
             await select_report_other()
-
+    
     # ─── STATE: WAITING ───
     elif bot_state.state == BotState.WAITING:
         if "find a new vibe" in text.lower():
@@ -435,7 +435,7 @@ async def cmd_status(client: Client, message: Message):
     duration = 0
     if bot_state.chat_start_time:
         duration = (datetime.now() - bot_state.chat_start_time).seconds // 60
-
+    
     status = f"""📊 Status:
 • State: {bot_state.state}
 • Messages: {bot_state.message_count}
@@ -462,25 +462,23 @@ async def main():
     print("=" * 60)
     print("  VibeChat AI Girl - Self-Test")
     print("=" * 60)
-
+    
     if not all([TELEGRAM_API_ID, TELEGRAM_API_HASH, TELEGRAM_PHONE]):
         print("❌ Missing Telegram credentials!")
         return
-
+    
     if not MISTRAL_API_KEY and not GROQ_API_KEY:
         print("⚠️ No AI keys! Using AI Horde only (very slow)")
         print("Get free keys: mistral.ai | groq.com")
-
+    
     await app.start()
     print(f"✅ Logged in as {app.me.first_name}")
-
+    
     await app.send_message(VIBECHAT_BOT, "/start")
     await asyncio.sleep(3)
     await start_finding_vibe()
-
-    await idle()
-
-from pyrogram.idle import idle
+    
+    await asyncio.Event().wait()  # Keep running forever
 
 if __name__ == "__main__":
     app.run(main())
