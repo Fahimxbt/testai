@@ -392,29 +392,42 @@ async def handle_vibechat_message(event):
 
     # ─── STATE: CHATTING ───
     elif bot_state.state == BotState.CHATTING:
-        # Skip ALL system messages from VibeChat bot
-        system_phrases = [
+        text_clean = text.strip()
+        text_lower = text_clean.lower()
+
+        # ALWAYS reply to M or F (gender reveal)
+        if text_clean in ["M", "F", "m", "f"]:
+            print(f"[{now()}] Gender message detected: {text_clean}")
+            # They said M = they're male. Reply F = you're female
+            if text_clean in ["M", "m"]:
+                reply = "F"
+            else:
+                reply = "F here too"
+
+            await asyncio.sleep(5)
+            sent = await client.send_message(VIBECHAT_BOT, reply)
+            bot_message_ids.add(sent.id)
+            bot_state.chat_history.append({"role": "user", "content": text_clean})
+            bot_state.chat_history.append({"role": "assistant", "content": reply})
+            print(f"[{now()}] AI: {reply}")
+            return
+
+        # Skip system messages
+        system_msgs = [
             "you've been matched", "next — skip", "stop — end",
             "rate your partner", "find a new vibe", "you stopped the chat",
-            "report", "vibe", "no vibe", "hunting for your vibe",
-            "don't be shy", "say hi first", "stranger!", "matched with",
-            "⏭️", "⏹️", "❤️", "💔", "🚫", "👋", "👇",
-            "tap something", "ayo", "👇", "👋", "⚡", "✨"
+            "hunting for your vibe", "don't be shy", "say hi first",
+            "stranger!", "matched with", "tap something", "ayo",
+            "⏭️", "⏹️", "❤️", "💔", "🚫", "👋", "👇", "⚡", "✨"
         ]
-        if any(x in text.lower() for x in system_phrases):
+        if any(x in text_lower for x in system_msgs):
             print(f"[{now()}] Skipping system message")
             return
 
-        # Skip if message is too short (but allow M/F/gender replies)
-        text_stripped = text.strip()
-        if len(text_stripped) < 2 and text_stripped.lower() not in ["m", "f", "f", "m"]:
-            print(f"[{now()}] Skipping short message")
+        # Skip if just emoji or dot
+        if len(text_clean) < 2 and text_clean not in ["M", "F", "m", "f"]:
+            print(f"[{now()}] Skipping short message: '{text_clean}'")
             return
-
-        # Detect if user is asking M/F or asl - add context to history
-        user_msg_lower = text.lower().strip()
-        if user_msg_lower in ["m or f", "m/f", "male or female", "asl", "m/f?"]:
-            print(f"[{now()}] Detected M/F or ASL question")
 
         # Skip if we just replied (cooldown)
         if last_reply_time and (datetime.now() - last_reply_time).seconds < 3:
