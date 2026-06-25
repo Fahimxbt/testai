@@ -278,7 +278,7 @@ async def start_finding_vibe():
     bot_state.reset_chat()
     bot_state.message_count = 0
     bot_message_ids.clear()
-    global last_reply_time
+    
     last_reply_time = None
     sent = await client.send_message(VIBECHAT_BOT, "⚡ Find a Vibe")
     bot_message_ids.add(sent.id)
@@ -326,10 +326,8 @@ async def auto_end_chat():
 
     goodbyes = [
         "gotta go",
-        "im leaving",
         "bye",
-        "cya",
-        "laters"
+        "cya"
     ]
     bye_msg = random.choice(goodbyes)
 
@@ -354,7 +352,7 @@ last_reply_time = None
 
 @client.on(events.NewMessage(chats=VIBECHAT_BOT))
 async def handle_vibechat_message(event):
-    global last_reply_time
+    
 
     text = event.message.text or ""
     msg_id = event.message.id
@@ -378,8 +376,7 @@ async def handle_vibechat_message(event):
             await asyncio.sleep(3)
 
             openings = [
-                "heyy", "hi there", "yo whats up", "hey stranger",
-                "hii", "yo", "heyy there", "hi"
+                "hey", "hi", "sup", "yo", "hii", "hey there"
             ]
             opening = random.choice(openings)
 
@@ -398,7 +395,6 @@ async def handle_vibechat_message(event):
         # ALWAYS reply to M or F (gender reveal)
         if text_clean in ["M", "F", "m", "f"]:
             print(f"[{now()}] Gender message detected: {text_clean}")
-            # They said M = they're male. Reply F = you're female
             if text_clean in ["M", "m"]:
                 reply = "F"
             else:
@@ -429,10 +425,7 @@ async def handle_vibechat_message(event):
             print(f"[{now()}] Skipping short message: '{text_clean}'")
             return
 
-        # Skip if we just replied (cooldown)
-        if last_reply_time and (datetime.now() - last_reply_time).seconds < 3:
-            print(f"[{now()}] Cooldown active, skipping")
-            return
+
 
         # Add to history
         bot_state.chat_history.append({"role": "user", "content": text})
@@ -454,7 +447,7 @@ async def handle_vibechat_message(event):
         # Send and track our message
         sent = await client.send_message(VIBECHAT_BOT, ai_response)
         bot_message_ids.add(sent.id)
-        last_reply_time = datetime.now()
+        
 
         print(f"[{now()}] AI: {ai_response[:80]}")
 
