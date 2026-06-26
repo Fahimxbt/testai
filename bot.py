@@ -1,6 +1,6 @@
 """
-Riya - Stepmom AI Chat Bot (Telethon Version) v7.0
-Fixed: Direct reason buttons, rating flow, wait cycle
+Riya - Stepmom AI Chat Bot (Telethon Version) v7.1
+Fixed: Report flow, rating flow, wait cycle restart
 """
 
 import os
@@ -319,6 +319,7 @@ class ChatBot:
         self._wait_started = False
         self._chat_session_id = 0
         self._rating_start_time = None  # For safety timeout
+        self._force_wait_triggered = False
 
     def reset_chat(self):
         self.chat_history = []
@@ -334,6 +335,7 @@ class ChatBot:
         self._rating_done = False
         self._wait_started = False
         self._rating_start_time = None
+        self._force_wait_triggered = False
 
     def format_history(self) -> str:
         if not self.chat_history:
@@ -733,7 +735,7 @@ async def send_report():
                 return
 
         if not clicked:
-            print(f"[{now()}] [WARN] Report button not found, sending text")
+            print(f"[{now()}] [WARN] Report button not found, sending text fallback")
             sent = await client.send_message(TARGET_BOT, "🚫 Report")
             bot_message_ids.add(sent.id)
 
@@ -742,12 +744,8 @@ async def send_report():
         await asyncio.sleep(2)
     except Exception as e:
         print(f"[{now()}] [Error] send_report: {e}")
-        async with bot_state._lock:
-            bot_state._rating_done = True
-            bot_state.state = BotState.WAITING
-            bot_state._wait_started = True
-        bot_state._wait_task = asyncio.create_task(safe_wait_then_find())
-        bot_state._track_task(bot_state._wait_task)
+        # On error, force wait to prevent getting stuck
+        await force_wait()
 
 async def select_report_other():
     """Click Other button on reason selection screen"""
@@ -770,7 +768,7 @@ async def select_report_other():
             clicked = await click_other_button()
 
         if not clicked:
-            print(f"[{now()}] [WARN] Other button not found, sending text")
+            print(f"[{now()}] [WARN] Other button not found, sending text fallback")
             sent = await client.send_message(TARGET_BOT, "Other")
             bot_message_ids.add(sent.id)
 
@@ -783,20 +781,20 @@ async def select_report_other():
         bot_state._track_task(bot_state._wait_task)
     except Exception as e:
         print(f"[{now()}] [Error] select_report_other: {e}")
-        async with bot_state._lock:
-            bot_state._rating_done = True
-            bot_state.state = BotState.WAITING
-            bot_state._wait_started = True
-        bot_state._wait_task = asyncio.create_task(safe_wait_then_find())
-        bot_state._track_task(bot_state._wait_task)
+        # On error, force wait to prevent getting stuck
+        await force_wait()
 
 async def force_wait():
     """Force transition to WAITING state and start wait timer"""
     print(f"[{now()}] FORCE WAIT triggered")
     async with bot_state._lock:
-        if bot_state._rating_done and bot_state.state == BotState.WAITING:
-            print(f"[{now()}] Already waiting, ignoring force wait")
+        if bot_state._force_wait_triggered:
+            print(f"[{now()}] Force wait already triggered, ignoring")
             return
+        if bot_state._rating_done and bot_state.state == BotState.WAITING and bot_state._wait_started:
+            print(f"[{now()}] Already waiting properly, ignoring force wait")
+            return
+        bot_state._force_wait_triggered = True
         bot_state._rating_done = True
         bot_state.state = BotState.WAITING
         bot_state._wait_started = True
@@ -816,6 +814,7 @@ async def safe_wait_then_find():
         async with bot_state._lock:
             bot_state.state = BotState.IDLE
             bot_state._wait_started = False
+            bot_state._force_wait_triggered = False
         await asyncio.sleep(15)
         async with bot_state._lock:
             if bot_state.state == BotState.IDLE and not bot_state._wait_started:
@@ -825,7 +824,12 @@ async def safe_wait_then_find():
 async def wait_then_find():
     my_session = bot_state._chat_session_id
     print(f"[{now()}] [Session {my_session}] Resting {WAIT_DURATION}s...")
-    await asyncio.sleep(WAIT_DURATION)
+
+    try:
+        await asyncio.sleep(WAIT_DURATION)
+    except asyncio.CancelledError:
+        print(f"[{now()}] [Session {my_session}] Wait sleep cancelled")
+        raise
 
     async with bot_state._lock:
         if bot_state._chat_session_id != my_session:
@@ -837,6 +841,7 @@ async def wait_then_find():
 
     persona.refresh()
     print(f"[{now()}] [Session {my_session}] New persona: {persona.name}, {persona.age}, {persona.mood}")
+
     async with bot_state._lock:
         if bot_state._chat_session_id != my_session:
             print(f"[{now()}] [Session {my_session}] STALE wait task after refresh. Aborting.")
@@ -844,6 +849,19 @@ async def wait_then_find():
         bot_state.state = BotState.IDLE
         bot_state._wait_started = False
         bot_state._rating_done = False
+        bot_state._force_wait_triggered = False
+
+    # Small delay before starting new find to ensure state is settled
+    await asyncio.sleep(2)
+
+    async with bot_state._lock:
+        if bot_state._chat_session_id != my_session:
+            print(f"[{now()}] [Session {my_session}] Session changed before find. Aborting.")
+            return
+        if bot_state.state != BotState.IDLE:
+            print(f"[{now()}] [Session {my_session}] State no longer IDLE ({bot_state.state}), aborting find")
+            return
+
     await safe_start_finding()
 
 async def safe_auto_end_chat():
@@ -1161,14 +1179,15 @@ async def handle_message(event):
             bot_state.report_reason_buttons_message_id = msg_id
             await asyncio.sleep(1)
             await select_report_other()
-        elif "report sent" in text_lower or "we'll review" in text_lower:
-            print(f"[{now()}] Report done - creating wait task")
+        elif "report sent" in text_lower or "we'll review" in text_lower or "report received" in text_lower:
+            print(f"[{now()}] Report confirmed - creating wait task")
             await force_wait()
         elif "find a new vibe" in text_lower:
             # If we see "Find a new vibe" while in REPORTING, force wait
             print(f"[{now()}] Find a new vibe in REPORTING - forcing wait")
             await force_wait()
         else:
+            # Unknown message in REPORTING - try to click Other or force wait
             await asyncio.sleep(1)
             await select_report_other()
 
@@ -1176,7 +1195,7 @@ async def handle_message(event):
     elif bot_state.state == BotState.WAITING:
         if "find a new vibe" in text_lower:
             print(f"[{now()}] Find a new vibe in WAITING - IGNORING (wait task handles it)")
-        elif "report sent" in text_lower or "we'll review" in text_lower:
+        elif "report sent" in text_lower or "we'll review" in text_lower or "report received" in text_lower:
             print(f"[{now()}] Report confirmed in WAITING - wait task already running")
         elif has_buttons:
             button_texts_lower = [strip_emoji(btn.text).lower() for row in event.message.buttons for btn in row]
@@ -1189,6 +1208,7 @@ async def handle_message(event):
             async with bot_state._lock:
                 bot_state.state = BotState.CHATTING
                 bot_state._wait_started = False
+                bot_state._force_wait_triggered = False
                 if not bot_state.chat_start_time:
                     bot_state.chat_start_time = datetime.now()
             bot_state._auto_end_task = asyncio.create_task(safe_auto_end_after_delay())
@@ -1261,6 +1281,7 @@ async def cmd_status(event):
 • Session: {bot_state._chat_session_id}
 • Rating Done: {bot_state._rating_done}
 • Wait Started: {bot_state._wait_started}
+• Force Wait Triggered: {bot_state._force_wait_triggered}
 • Rating Stuck: {rating_stuck}s
 """
     await event.reply(status)
@@ -1288,6 +1309,7 @@ async def cmd_force_find(event):
         bot_state.state = BotState.IDLE
         bot_state._rating_done = False
         bot_state._wait_started = False
+        bot_state._force_wait_triggered = False
     bot_state.cancel_all_tasks()
     await safe_start_finding()
     await event.reply("Forced find.")
@@ -1299,6 +1321,7 @@ async def cmd_skip_wait(event):
         bot_state.state = BotState.IDLE
         bot_state._wait_started = False
         bot_state._rating_done = False
+        bot_state._force_wait_triggered = False
     await safe_start_finding()
     await event.reply("Skipped wait.")
 
@@ -1313,7 +1336,7 @@ async def keep_alive():
 
 async def main():
     print("=" * 60)
-    print("  Riya v7.0 - Stepmom Edition - Fixed Direct Reason Buttons")
+    print("  Riya v7.1 - Stepmom Edition - Fixed Report & Wait Cycle")
     print("=" * 60)
 
     if not TELEGRAM_API_ID or not TELEGRAM_API_HASH:
