@@ -1,5 +1,5 @@
 """
-Riya - Stepmom AI Chat Bot (Telethon Version) v7.1
+Riya - Stepmom AI Chat Bot (Telethon Version) v7.2
 Fixed: Report flow, rating flow, wait cycle restart
 """
 
@@ -561,7 +561,7 @@ else:
     client = TelegramClient("ri_session", TELEGRAM_API_ID, TELEGRAM_API_HASH)
 
 # ═══════════════════════════════════════════════════════════════
-# BUTTON CLICKING
+# BUTTON CLICKING - FIXED
 # ═══════════════════════════════════════════════════════════════
 
 def strip_emoji(text: str) -> str:
@@ -583,21 +583,26 @@ def strip_emoji(text: str) -> str:
     return emoji_pattern.sub(r'', text).strip()
 
 async def find_and_click_button(button_text: str, message_id: int = None, search_recent: bool = False) -> bool:
+    """Find and click a button by text. Returns True if clicked."""
     try:
         target_text = button_text.lower().strip()
 
+        # Try specific message first
         if message_id:
-            message = await client.get_messages(TARGET_BOT, ids=message_id)
-            if message and message.buttons:
-                for row in message.buttons:
-                    for btn in row:
-                        clean_btn_text = strip_emoji(btn.text).lower().strip()
-                        if target_text in clean_btn_text or clean_btn_text in target_text:
-                            await btn.click()
-                            print(f"[{now()}] -> Clicked: '{btn.text}'")
-                            return True
-                return False
+            try:
+                message = await client.get_messages(TARGET_BOT, ids=message_id)
+                if message and message.buttons:
+                    for row in message.buttons:
+                        for btn in row:
+                            clean_btn_text = strip_emoji(btn.text).lower().strip()
+                            if target_text in clean_btn_text or clean_btn_text in target_text:
+                                await btn.click()
+                                print(f"[{now()}] -> Clicked: '{btn.text}' (msg_id={message_id})")
+                                return True
+            except Exception as e:
+                print(f"[{now()}] [get_messages error] {e}")
 
+        # Search recent messages
         limit = 15 if search_recent else 10
         async for message in client.iter_messages(TARGET_BOT, limit=limit):
             if message.buttons:
@@ -606,7 +611,7 @@ async def find_and_click_button(button_text: str, message_id: int = None, search
                         clean_btn_text = strip_emoji(btn.text).lower().strip()
                         if target_text in clean_btn_text or clean_btn_text in target_text:
                             await btn.click()
-                            print(f"[{now()}] -> Clicked: '{btn.text}'")
+                            print(f"[{now()}] -> Clicked: '{btn.text}' (found in recent)")
                             return True
         return False
     except Exception as e:
@@ -614,6 +619,7 @@ async def find_and_click_button(button_text: str, message_id: int = None, search
         return False
 
 async def click_report_button(message_id: int = None) -> bool:
+    """Click the Report button on the rating screen."""
     for search_recent in [False, True]:
         for text in ["report", "🚫 report"]:
             if await find_and_click_button(text, message_id=message_id, search_recent=search_recent):
@@ -621,6 +627,7 @@ async def click_report_button(message_id: int = None) -> bool:
     return False
 
 async def click_other_button(message_id: int = None) -> bool:
+    """Click the Other button on the reason selection screen."""
     for search_recent in [False, True]:
         for text in ["other", "🙌 other", "other "]:
             if await find_and_click_button(text, message_id=message_id, search_recent=search_recent):
@@ -628,7 +635,7 @@ async def click_other_button(message_id: int = None) -> bool:
     return False
 
 # ═══════════════════════════════════════════════════════════════
-# ACTIONS
+# ACTIONS - FIXED REPORT FLOW
 # ═══════════════════════════════════════════════════════════════
 
 async def safe_start_finding():
@@ -699,7 +706,10 @@ async def send_stop():
         print(f"[{now()}] [Error] send_stop: {e}")
 
 async def send_report():
-    """Click Report button (for flows that have a Report button first)"""
+    """
+    Step 1: Click Report button on the rating screen.
+    This triggers the reason selection screen with 4 options.
+    """
     async with bot_state._lock:
         if bot_state._rating_done:
             print(f"[{now()}] BLOCKED: Rating already done")
@@ -714,41 +724,33 @@ async def send_report():
 
     try:
         clicked = False
+        # Try to click Report button on the specific message first
         if bot_state.report_buttons_message_id:
             clicked = await click_report_button(bot_state.report_buttons_message_id)
+        # Fallback: search recent messages
         if not clicked:
             clicked = await click_report_button()
 
-        if not clicked and bot_state.report_buttons_message_id:
-            # Can't find Report button - maybe it's a direct reason screen?
-            # Try clicking Other directly
-            has_other = await click_other_button(bot_state.report_buttons_message_id)
-            if has_other:
-                print(f"[{now()}] -> No Report button found, clicked Other directly")
-                bot_state.total_interactions += 1
-                async with bot_state._lock:
-                    bot_state._rating_done = True
-                    bot_state.state = BotState.WAITING
-                    bot_state._wait_started = True
-                bot_state._wait_task = asyncio.create_task(safe_wait_then_find())
-                bot_state._track_task(bot_state._wait_task)
-                return
+        if clicked:
+            print(f"[{now()}] -> Report button clicked")
+            bot_state.total_interactions += 1
+            # Wait for the reason selection screen to appear
+            await asyncio.sleep(2)
+            # Now the handler will see the new message with 4 reason buttons
+            # and trigger select_report_other()
+        else:
+            print(f"[{now()}] [WARN] Could not find Report button, forcing wait")
+            await force_wait()
 
-        if not clicked:
-            print(f"[{now()}] [WARN] Report button not found, sending text fallback")
-            sent = await client.send_message(TARGET_BOT, "🚫 Report")
-            bot_message_ids.add(sent.id)
-
-        print(f"[{now()}] -> Report")
-        bot_state.total_interactions += 1
-        await asyncio.sleep(2)
     except Exception as e:
         print(f"[{now()}] [Error] send_report: {e}")
-        # On error, force wait to prevent getting stuck
         await force_wait()
 
 async def select_report_other():
-    """Click Other button on reason selection screen"""
+    """
+    Step 2: Click Other button on the reason selection screen (4 options).
+    After clicking, wait 5 mins then start new chat.
+    """
     async with bot_state._lock:
         if bot_state._rating_done:
             print(f"[{now()}] BLOCKED: Rating already done")
@@ -762,30 +764,32 @@ async def select_report_other():
 
     try:
         clicked = False
+        # Try to click Other button on the specific reason message first
         if bot_state.report_reason_buttons_message_id:
             clicked = await click_other_button(bot_state.report_reason_buttons_message_id)
+        # Fallback: search recent messages
         if not clicked:
             clicked = await click_other_button()
 
-        if not clicked:
-            print(f"[{now()}] [WARN] Other button not found, sending text fallback")
-            sent = await client.send_message(TARGET_BOT, "Other")
-            bot_message_ids.add(sent.id)
+        if clicked:
+            print(f"[{now()}] -> Selected Other | Total: {bot_state.total_interactions}")
+            async with bot_state._lock:
+                bot_state._rating_done = True
+                bot_state.state = BotState.WAITING
+                bot_state._wait_started = True
+            # Start the 5-min wait then find new chat
+            bot_state._wait_task = asyncio.create_task(safe_wait_then_find())
+            bot_state._track_task(bot_state._wait_task)
+        else:
+            print(f"[{now()}] [WARN] Could not find Other button, forcing wait")
+            await force_wait()
 
-        print(f"[{now()}] -> Selected 'Other' | Total: {bot_state.total_interactions}")
-        async with bot_state._lock:
-            bot_state._rating_done = True
-            bot_state.state = BotState.WAITING
-            bot_state._wait_started = True
-        bot_state._wait_task = asyncio.create_task(safe_wait_then_find())
-        bot_state._track_task(bot_state._wait_task)
     except Exception as e:
         print(f"[{now()}] [Error] select_report_other: {e}")
-        # On error, force wait to prevent getting stuck
         await force_wait()
 
 async def force_wait():
-    """Force transition to WAITING state and start wait timer"""
+    """Force transition to WAITING state and start wait timer."""
     print(f"[{now()}] FORCE WAIT triggered")
     async with bot_state._lock:
         if bot_state._force_wait_triggered:
@@ -904,7 +908,7 @@ def now():
     return datetime.now().strftime("%H:%M:%S")
 
 # ═══════════════════════════════════════════════════════════════
-# MESSAGE HANDLER - FIXED FOR DIRECT REASON BUTTONS
+# MESSAGE HANDLER - FIXED REPORT FLOW
 # ═══════════════════════════════════════════════════════════════
 
 bot_message_ids = set()
@@ -988,7 +992,7 @@ async def handle_message(event):
                     bot_state.report_reason_buttons_message_id = msg_id
                     await select_report_other()
                 else:
-                    # Has Report button - normal flow
+                    # Has Report button - normal 2-step flow
                     await send_report()
             else:
                 print(f"[{now()}] No rating buttons, going straight to wait")
@@ -1161,20 +1165,23 @@ async def handle_message(event):
         if has_buttons:
             button_texts_lower = [strip_emoji(btn.text).lower() for row in event.message.buttons for btn in row]
 
+            # Check for Other button (reason selection screen with 4 options)
             if any("other" in b for b in button_texts_lower):
-                print(f"[{now()}] Reason screen with Other")
+                print(f"[{now()}] Reason screen with Other button")
                 bot_state.report_reason_buttons_message_id = msg_id
                 await asyncio.sleep(1)
                 await select_report_other()
                 return
 
+            # Check for Report button (still on first rating screen)
             if any("report" in b for b in button_texts_lower):
-                print(f"[{now()}] Another rating screen")
+                print(f"[{now()}] Still on rating screen, clicking Report")
                 bot_state.report_buttons_message_id = msg_id
                 await asyncio.sleep(1)
                 await send_report()
                 return
 
+        # Text-based detection for reason selection screen
         if any(x in text_lower for x in ["reason", "why", "select", "option", "harassment", "inappropriate", "spam"]):
             bot_state.report_reason_buttons_message_id = msg_id
             await asyncio.sleep(1)
@@ -1336,7 +1343,7 @@ async def keep_alive():
 
 async def main():
     print("=" * 60)
-    print("  Riya v7.1 - Stepmom Edition - Fixed Report & Wait Cycle")
+    print("  Riya v7.2 - Stepmom Edition - Fixed Report & Wait Cycle")
     print("=" * 60)
 
     if not TELEGRAM_API_ID or not TELEGRAM_API_HASH:
