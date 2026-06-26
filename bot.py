@@ -1,5 +1,5 @@
 """
-Riya - Stepmom AI Chat Bot (Telethon Version) v7.2
+(Telethon Version) v7.2
 Fixed: Report flow, rating flow, wait cycle restart
 """
 
