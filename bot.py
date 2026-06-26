@@ -1,6 +1,6 @@
 """
-(Telethon Version) v7.2
-Fixed: Report flow, rating flow, wait cycle restart
+Riya - Stepmom AI Chat Bot (Telethon Version) v7.3
+CRITICAL FIX: Report flow - click Report then Other, then wait 5 min, then find new vibe
 """
 
 import os
@@ -318,8 +318,9 @@ class ChatBot:
         self._rating_done = False
         self._wait_started = False
         self._chat_session_id = 0
-        self._rating_start_time = None  # For safety timeout
+        self._rating_start_time = None
         self._force_wait_triggered = False
+        self._report_clicked = False  # Track if we already clicked Report
 
     def reset_chat(self):
         self.chat_history = []
@@ -336,6 +337,7 @@ class ChatBot:
         self._wait_started = False
         self._rating_start_time = None
         self._force_wait_triggered = False
+        self._report_clicked = False
 
     def format_history(self) -> str:
         if not self.chat_history:
@@ -350,15 +352,15 @@ class ChatBot:
         if not self.chat_start_time:
             return
         elapsed = (datetime.now() - self.chat_start_time).total_seconds()
-        if elapsed < 120:        # 0-2 mins: Normal
+        if elapsed < 120:
             self.phase = 1
-        elif elapsed < 300:      # 2-5 mins: Light flirty
+        elif elapsed < 300:
             self.phase = 2
-        elif elapsed < 480:      # 5-8 mins: Turned on
+        elif elapsed < 480:
             self.phase = 3
-        elif elapsed < 720:      # 8-12 mins: Full NSFW
+        elif elapsed < 720:
             self.phase = 4
-        else:                    # 12-15 mins: Peak NSFW
+        else:
             self.phase = 5
 
     def _track_task(self, task):
@@ -509,7 +511,7 @@ def get_smart_fallback(message: str, phase: int) -> str:
         else:
             return random.choice(["choke me while u fuck me deep", "ride ur face till u cant breathe", "cum inside me now", "suck my tits hard daddy", "grab my hair fuck my mouth", "lick my clit till i scream", "spank my ass red", "my pussy throbbin for u", "get on ur knees and eat me", "swallow every drop like a good boy"])
 
-    else:  # phase 5
+    else:
         if is_stepmom_hint:
             return random.choice(["mommy needs ur cock baby boy", "fuck me till i cant walk", "cum all over my tits", "im ur slutty stepmom rn", "destroy this pussy daddy"])
         elif is_resistance:
@@ -702,6 +704,7 @@ async def send_stop():
         async with bot_state._lock:
             bot_state.state = BotState.RATING
             bot_state._rating_start_time = datetime.now()
+            bot_state._report_clicked = False
     except Exception as e:
         print(f"[{now()}] [Error] send_stop: {e}")
 
@@ -720,7 +723,11 @@ async def send_report():
         if not bot_state.can_perform_action(cooldown=5):
             print(f"[{now()}] BLOCKED: Action cooldown active")
             return
+        if bot_state._report_clicked:
+            print(f"[{now()}] BLOCKED: Already clicked Report this session")
+            return
         bot_state.state = BotState.REPORTING
+        bot_state._report_clicked = True
 
     try:
         clicked = False
@@ -732,11 +739,11 @@ async def send_report():
             clicked = await click_report_button()
 
         if clicked:
-            print(f"[{now()}] -> Report button clicked")
+            print(f"[{now()}] -> Report button clicked successfully")
             bot_state.total_interactions += 1
             # Wait for the reason selection screen to appear
             await asyncio.sleep(2)
-            # Now the handler will see the new message with 4 reason buttons
+            # The handler will see the new message with 4 reason buttons
             # and trigger select_report_other()
         else:
             print(f"[{now()}] [WARN] Could not find Report button, forcing wait")
@@ -902,13 +909,14 @@ async def auto_end_chat():
         if bot_state.state == BotState.CHATTING and bot_state._chat_session_id == my_session:
             bot_state.state = BotState.RATING
             bot_state._rating_start_time = datetime.now()
+            bot_state._report_clicked = False
     await send_stop()
 
 def now():
     return datetime.now().strftime("%H:%M:%S")
 
 # ═══════════════════════════════════════════════════════════════
-# MESSAGE HANDLER - FIXED REPORT FLOW
+# MESSAGE HANDLER - CRITICAL FIX FOR REPORT FLOW
 # ═══════════════════════════════════════════════════════════════
 
 bot_message_ids = set()
@@ -977,6 +985,7 @@ async def handle_message(event):
             async with bot_state._lock:
                 bot_state.state = BotState.RATING
                 bot_state._rating_start_time = datetime.now()
+                bot_state._report_clicked = False
                 bot_state.cancel_auto_end()
             if has_buttons:
                 bot_state.report_buttons_message_id = msg_id
@@ -1006,6 +1015,7 @@ async def handle_message(event):
                 async with bot_state._lock:
                     bot_state.state = BotState.RATING
                     bot_state._rating_start_time = datetime.now()
+                    bot_state._report_clicked = False
                     bot_state.cancel_auto_end()
                 bot_state.report_buttons_message_id = msg_id
                 await asyncio.sleep(1)
@@ -1128,15 +1138,19 @@ async def handle_message(event):
             button_texts_lower = [strip_emoji(btn.text).lower() for row in event.message.buttons for btn in row]
             has_report_btn = any("report" in b for b in button_texts_lower)
             has_other_btn = any("other" in b for b in button_texts_lower)
+            has_harassment = any("harassment" in b for b in button_texts_lower)
+            has_inappropriate = any("inappropriate" in b for b in button_texts_lower)
+            has_spam = any("spam" in b for b in button_texts_lower)
 
-            if not has_report_btn and has_other_btn:
-                # Direct reason screen - click Other immediately
-                print(f"[{now()}] Direct reason buttons in RATING, clicking Other")
+            # This is the 4-option reason screen (Harassment, Inappropriate, Spam, Other)
+            if has_other_btn and (has_harassment or has_inappropriate or has_spam):
+                print(f"[{now()}] 4-option reason screen detected in RATING, clicking Other")
                 bot_state.report_reason_buttons_message_id = msg_id
                 await asyncio.sleep(1)
                 await select_report_other()
                 return
 
+            # This is the rating screen with Report button
             if has_report_btn:
                 print(f"[{now()}] Rating screen with Report button")
                 bot_state.report_buttons_message_id = msg_id
@@ -1144,6 +1158,7 @@ async def handle_message(event):
                 await send_report()
                 return
 
+        # Text-based detection
         if "rate your partner" in text_lower or "rate your vibe" in text_lower or "how was your chat" in text_lower:
             bot_state.report_buttons_message_id = msg_id
             await asyncio.sleep(1)
@@ -1164,33 +1179,45 @@ async def handle_message(event):
 
         if has_buttons:
             button_texts_lower = [strip_emoji(btn.text).lower() for row in event.message.buttons for btn in row]
+            has_other_btn = any("other" in b for b in button_texts_lower)
+            has_harassment = any("harassment" in b for b in button_texts_lower)
+            has_inappropriate = any("inappropriate" in b for b in button_texts_lower)
+            has_spam = any("spam" in b for b in button_texts_lower)
+            has_report_btn = any("report" in b for b in button_texts_lower)
 
-            # Check for Other button (reason selection screen with 4 options)
-            if any("other" in b for b in button_texts_lower):
-                print(f"[{now()}] Reason screen with Other button")
+            # 4-option reason screen - MUST click Other
+            if has_other_btn and (has_harassment or has_inappropriate or has_spam):
+                print(f"[{now()}] 4-option reason screen in REPORTING, clicking Other")
                 bot_state.report_reason_buttons_message_id = msg_id
                 await asyncio.sleep(1)
                 await select_report_other()
                 return
 
-            # Check for Report button (still on first rating screen)
-            if any("report" in b for b in button_texts_lower):
+            # Still on rating screen with Report button - click it
+            if has_report_btn and not bot_state._report_clicked:
                 print(f"[{now()}] Still on rating screen, clicking Report")
                 bot_state.report_buttons_message_id = msg_id
                 await asyncio.sleep(1)
                 await send_report()
                 return
 
+            # Only Other button (no harassment/inappropriate/spam) - direct reason screen
+            if has_other_btn and not has_report_btn and not has_harassment:
+                print(f"[{now()}] Direct Other button screen")
+                bot_state.report_reason_buttons_message_id = msg_id
+                await asyncio.sleep(1)
+                await select_report_other()
+                return
+
         # Text-based detection for reason selection screen
-        if any(x in text_lower for x in ["reason", "why", "select", "option", "harassment", "inappropriate", "spam"]):
+        if any(x in text_lower for x in ["harassment", "inappropriate", "spam", "reason", "why", "select", "option"]):
             bot_state.report_reason_buttons_message_id = msg_id
             await asyncio.sleep(1)
             await select_report_other()
         elif "report sent" in text_lower or "we'll review" in text_lower or "report received" in text_lower:
-            print(f"[{now()}] Report confirmed - creating wait task")
+            print(f"[{now()}] Report confirmed - forcing wait")
             await force_wait()
         elif "find a new vibe" in text_lower:
-            # If we see "Find a new vibe" while in REPORTING, force wait
             print(f"[{now()}] Find a new vibe in REPORTING - forcing wait")
             await force_wait()
         else:
@@ -1289,6 +1316,7 @@ async def cmd_status(event):
 • Rating Done: {bot_state._rating_done}
 • Wait Started: {bot_state._wait_started}
 • Force Wait Triggered: {bot_state._force_wait_triggered}
+• Report Clicked: {bot_state._report_clicked}
 • Rating Stuck: {rating_stuck}s
 """
     await event.reply(status)
@@ -1317,6 +1345,7 @@ async def cmd_force_find(event):
         bot_state._rating_done = False
         bot_state._wait_started = False
         bot_state._force_wait_triggered = False
+        bot_state._report_clicked = False
     bot_state.cancel_all_tasks()
     await safe_start_finding()
     await event.reply("Forced find.")
@@ -1329,6 +1358,7 @@ async def cmd_skip_wait(event):
         bot_state._wait_started = False
         bot_state._rating_done = False
         bot_state._force_wait_triggered = False
+        bot_state._report_clicked = False
     await safe_start_finding()
     await event.reply("Skipped wait.")
 
@@ -1343,7 +1373,7 @@ async def keep_alive():
 
 async def main():
     print("=" * 60)
-    print("  Riya v7.2 - Stepmom Edition - Fixed Report & Wait Cycle")
+    print("  Riya v7.3 - Stepmom Edition - CRITICAL FIX: Report Flow")
     print("=" * 60)
 
     if not TELEGRAM_API_ID or not TELEGRAM_API_HASH:
