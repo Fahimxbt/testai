@@ -6,6 +6,7 @@ import os
 import sys
 import asyncio
 import random
+import re
 import traceback
 from datetime import datetime
 
@@ -99,7 +100,7 @@ persona = PersonaEngine()
 # ═══════════════════════════════════════════════════════════════
 
 def build_phase_prompt(phase: int, persona: PersonaEngine, history: str, message: str) -> tuple:
-    """Returns (system_msg, user_prompt) for the given phase."""
+    """Returns (system_msg, user_prompt, max_tokens, temp) for the given phase."""
 
     name = persona.name
     age = persona.age
@@ -463,6 +464,90 @@ else:
     )
 
 # ═══════════════════════════════════════════════════════════════
+# BUTTON CLICKING - FIXED with robust detection
+# ═══════════════════════════════════════════════════════════════
+
+def strip_emoji(text: str) -> str:
+    """Remove emoji characters from text for better matching."""
+    emoji_pattern = re.compile(
+        "["
+        "\U0001F600-\U0001F64F"  # emoticons
+        "\U0001F300-\U0001F5FF"  # symbols & pictographs
+        "\U0001F680-\U0001F6FF"  # transport & map symbols
+        "\U0001F1E0-\U0001F1FF"  # flags
+        "\U00002702-\U000027B0"
+        "\U000024C2-\U0001F251"
+        "\U0001F900-\U0001F9FF"  # supplemental symbols
+        "\U0001FA00-\U0001FA6F"  # chess symbols
+        "\U0001FA70-\U0001FAFF"  # symbols and pictographs extended-a
+        "\U00002600-\U000026FF"  # miscellaneous symbols
+        "\U00002700-\U000027BF"  # dingbats
+        "]+", flags=re.UNICODE
+    )
+    return emoji_pattern.sub(r'', text).strip()
+
+async def find_and_click_button(button_text: str, message_id: int = None, search_recent: bool = False) -> bool:
+    """
+    Robustly find and click a button by text.
+    - Strips emojis from button text before matching
+    - Case-insensitive partial match
+    - If message_id provided, only search that message
+    - If search_recent, search last 15 messages
+    """
+    try:
+        target_text = button_text.lower().strip()
+
+        if message_id:
+            message = await client.get_messages(TARGET_BOT, ids=message_id)
+            if message and message.buttons:
+                for row in message.buttons:
+                    for btn in row:
+                        clean_btn_text = strip_emoji(btn.text).lower().strip()
+                        if target_text in clean_btn_text or clean_btn_text in target_text:
+                            await btn.click()
+                            print(f"[{now()}] → Clicked button: '{btn.text}' (matched '{button_text}')")
+                            return True
+                print(f"[{now()}] Button '{button_text}' not found on message {message_id}")
+                return False
+
+        # Search recent messages
+        limit = 15 if search_recent else 10
+        async for message in client.iter_messages(TARGET_BOT, limit=limit):
+            if message.buttons:
+                for row in message.buttons:
+                    for btn in row:
+                        clean_btn_text = strip_emoji(btn.text).lower().strip()
+                        if target_text in clean_btn_text or clean_btn_text in target_text:
+                            await btn.click()
+                            print(f"[{now()}] → Clicked button: '{btn.text}' (matched '{button_text}')")
+                            return True
+
+        print(f"[{now()}] Button '{button_text}' not found in recent {limit} messages")
+        return False
+
+    except Exception as e:
+        print(f"[{now()}] [Button Click Error] {e}")
+        traceback.print_exc()
+        return False
+
+async def click_report_button(message_id: int = None) -> bool:
+    """Click the Report button. Try multiple variations."""
+    # Try message_id first, then recent messages
+    for search_recent in [False, True]:
+        for text in ["report", "🚫 report"]:
+            if await find_and_click_button(text, message_id=message_id, search_recent=search_recent):
+                return True
+    return False
+
+async def click_other_button(message_id: int = None) -> bool:
+    """Click the Other button. Try multiple variations."""
+    for search_recent in [False, True]:
+        for text in ["other", "🙌 other", "other "]:
+            if await find_and_click_button(text, message_id=message_id, search_recent=search_recent):
+                return True
+    return False
+
+# ═══════════════════════════════════════════════════════════════
 # ACTIONS - FIXED with exception handling and task tracking
 # ═══════════════════════════════════════════════════════════════
 
@@ -513,73 +598,73 @@ async def send_stop():
     except Exception as e:
         print(f"[{now()}] [Error] send_stop: {e}")
 
-async def click_inline_button(button_text: str, message_id: int = None):
-    """Click an inline button by text. If message_id provided, search that message only."""
-    try:
-        if message_id:
-            message = await client.get_messages(TARGET_BOT, ids=message_id)
-            if message and message.buttons:
-                for row in message.buttons:
-                    for btn in row:
-                        if button_text.lower() in btn.text.lower():
-                            await btn.click()
-                            print(f"[{now()}] → Clicked inline button: {btn.text}")
-                            return True
-            print(f"[{now()}] Button '{button_text}' not found on message {message_id}")
-            return False
-        else:
-            async for message in client.iter_messages(TARGET_BOT, limit=10):
-                if message.buttons:
-                    for row in message.buttons:
-                        for btn in row:
-                            if button_text.lower() in btn.text.lower():
-                                await btn.click()
-                                print(f"[{now()}] → Clicked inline button: {btn.text}")
-                                return True
-            print(f"[{now()}] Button '{button_text}' not found in recent messages")
-            return False
-    except Exception as e:
-        print(f"[{now()}] [Button Click Error] {e}")
-        return False
-
 async def send_report():
+    """Click Report button. If rating screen already shows reasons, skip to Other."""
     try:
+        # First, try clicking Report on the stored message
         clicked = False
         if bot_state.report_buttons_message_id:
-            clicked = await click_inline_button("Report", bot_state.report_buttons_message_id)
+            clicked = await click_report_button(bot_state.report_buttons_message_id)
+
         if not clicked:
-            clicked = await click_inline_button("Report")
+            # Try searching recent messages for Report button
+            clicked = await click_report_button()
+
         if not clicked:
+            # Check if the rating message already has "Other" button (no separate Report step)
+            if bot_state.report_buttons_message_id:
+                has_other = await click_other_button(bot_state.report_buttons_message_id)
+                if has_other:
+                    print(f"[{now()}] → Skipped Report, clicked Other directly on rating screen")
+                    bot_state.total_interactions += 1
+                    bot_state.state = BotState.WAITING
+                    bot_state._wait_task = asyncio.create_task(safe_wait_then_find())
+                    bot_state._track_task(bot_state._wait_task)
+                    return
+
+            # Last resort: send text (but this probably won't work with inline buttons)
+            print(f"[{now()}] [WARN] Could not find Report button, sending text fallback")
             sent = await client.send_message(TARGET_BOT, "🚫 Report")
             bot_message_ids.add(sent.id)
+
         print(f"[{now()}] → Report")
         bot_state.total_interactions += 1
         bot_state.state = BotState.REPORTING
         await asyncio.sleep(2)
+
     except Exception as e:
         print(f"[{now()}] [Error] send_report: {e}")
+        traceback.print_exc()
         # If report fails, just move to waiting
         bot_state.state = BotState.WAITING
         bot_state._wait_task = asyncio.create_task(safe_wait_then_find())
         bot_state._track_task(bot_state._wait_task)
 
 async def select_report_other():
+    """Click Other button on the reason selection screen."""
     try:
         clicked = False
         if bot_state.report_reason_buttons_message_id:
-            clicked = await click_inline_button("Other", bot_state.report_reason_buttons_message_id)
+            clicked = await click_other_button(bot_state.report_reason_buttons_message_id)
+
         if not clicked:
-            clicked = await click_inline_button("Other")
+            clicked = await click_other_button()
+
         if not clicked:
+            # Fallback: send text
+            print(f"[{now()}] [WARN] Could not find Other button, sending text fallback")
             sent = await client.send_message(TARGET_BOT, "Other")
             bot_message_ids.add(sent.id)
+
         print(f"[{now()}] → Selected 'Other'")
         print(f"[{now()}] Total tracked: {bot_state.total_interactions}")
         bot_state.state = BotState.WAITING
         bot_state._wait_task = asyncio.create_task(safe_wait_then_find())
         bot_state._track_task(bot_state._wait_task)
+
     except Exception as e:
         print(f"[{now()}] [Error] select_report_other: {e}")
+        traceback.print_exc()
         # Force to waiting state and try to recover
         bot_state.state = BotState.WAITING
         bot_state._wait_task = asyncio.create_task(safe_wait_then_find())
@@ -613,17 +698,13 @@ async def wait_then_find():
     await safe_start_finding()
 
 async def safe_auto_end_chat():
-    """Wrapper with exception handling for auto-end."""
+    """Wrapper with exception handling."""
     try:
         await auto_end_chat()
     except asyncio.CancelledError:
         raise
     except Exception as e:
         print(f"[{now()}] [Error] auto_end_chat: {e}")
-        # Force state to waiting and start recovery
-        bot_state.state = BotState.WAITING
-        bot_state._wait_task = asyncio.create_task(safe_wait_then_find())
-        bot_state._track_task(bot_state._wait_task)
 
 async def auto_end_chat():
     if bot_state.state != BotState.CHATTING:
@@ -658,6 +739,7 @@ async def handle_message(event):
     text = event.message.text or ""
     msg_id = event.message.id
     has_media = event.message.media is not None
+    has_buttons = event.message.buttons is not None and len(event.message.buttons) > 0
 
     # Skip if this is our own message
     if msg_id in bot_message_ids:
@@ -669,6 +751,14 @@ async def handle_message(event):
         text = "[media]"
     else:
         print(f"[{now()}] [{bot_state.state.upper()}] {text[:120]}")
+
+    # Log buttons if present
+    if has_buttons:
+        button_texts = []
+        for row in event.message.buttons:
+            for btn in row:
+                button_texts.append(btn.text)
+        print(f"[{now()}] [BUTTONS] {button_texts}")
 
     # ─── STATE: FINDING ───
     if bot_state.state == BotState.FINDING:
@@ -842,21 +932,37 @@ async def handle_message(event):
 
     # ─── STATE: RATING ───
     elif bot_state.state == BotState.RATING:
-        if "rate your partner" in text.lower():
+        text_lower = text.lower()
+
+        if "rate your partner" in text_lower:
             bot_state.report_buttons_message_id = msg_id
             await asyncio.sleep(1)
             await send_report()
-        elif "partner left" in text.lower() or "stranger left" in text.lower():
+
+        elif "partner left" in text_lower or "stranger left" in text_lower:
             # Partner left before we could rate, just go to waiting
             print(f"[{now()}] Partner left, skipping rating")
             bot_state.state = BotState.WAITING
             bot_state._wait_task = asyncio.create_task(safe_wait_then_find())
             bot_state._track_task(bot_state._wait_task)
 
+        elif has_buttons:
+            # If we get a message with buttons while in RATING state, it might be the rating screen
+            # Check if it has "Other" button (direct rating screen)
+            for row in event.message.buttons:
+                for btn in row:
+                    clean = strip_emoji(btn.text).lower().strip()
+                    if "other" in clean:
+                        print(f"[{now()}] Found rating screen with Other button, clicking directly")
+                        bot_state.report_buttons_message_id = msg_id
+                        await asyncio.sleep(1)
+                        await send_report()
+                        return
+
     # ─── STATE: REPORTING ───
     elif bot_state.state == BotState.REPORTING:
         # Check if this message has the reason buttons
-        if event.message.buttons:
+        if has_buttons:
             bot_state.report_reason_buttons_message_id = msg_id
             await asyncio.sleep(1)
             await select_report_other()
@@ -875,9 +981,10 @@ async def handle_message(event):
 
     # ─── STATE: WAITING ───
     elif bot_state.state == BotState.WAITING:
-        if "find a new vibe" in text.lower():
+        text_lower = text.lower()
+        if "find a new vibe" in text_lower:
             print(f"[{now()}] Ready for next cycle")
-        elif "report sent" in text.lower() or "we'll review" in text.lower():
+        elif "report sent" in text_lower or "we'll review" in text_lower:
             print(f"[{now()}] Report confirmed in waiting state")
 
 async def safe_auto_end_after_delay():
