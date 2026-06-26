@@ -1,10 +1,12 @@
 """
-Riya - Anonymous Chat Bot (Telethon Version)
+Riya - Anonymous Chat Bot (Telethon Version) - FIXED & REWRITTEN
 """
 
 import os
+import sys
 import asyncio
 import random
+import traceback
 from datetime import datetime
 
 from telethon import TelegramClient, events
@@ -24,8 +26,8 @@ TARGET_BOT = os.getenv("TARGET_BOT", "")
 MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY", "")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 
-CHAT_DURATION = int(os.getenv("CHAT_DURATION", "900"))  # 15 mins
-WAIT_DURATION = int(os.getenv("WAIT_DURATION", "300"))   # 5 mins rest
+CHAT_DURATION = int(os.getenv("CHAT_DURATION", "900"))      # 15 mins
+WAIT_DURATION = int(os.getenv("WAIT_DURATION", "300"))     # 5 mins rest
 MAX_MESSAGES_PER_MIN = int(os.getenv("MAX_MESSAGES_PER_MIN", "6"))
 
 # ═══════════════════════════════════════════════════════════════
@@ -50,88 +52,183 @@ if GROQ_API_KEY:
     )
 
 # ═══════════════════════════════════════════════════════════════
-# CHARACTER PROMPT
+# PERSONA ENGINE - Dynamic dominant woman, 25+, hard to get
 # ═══════════════════════════════════════════════════════════════
 
-PHASE1_PROMPT = """You are "Riya", a 21-year-old Indian girl chatting on an anonymous app.
+NAMES_POOL = [
+    "Riya", "Ananya", "Priya", "Nisha", "Kavya", "Ishita", "Sanya", "Tanya",
+    "Meera", "Zara", "Diya", "Rhea", "Sara", "Myra", "Kiara", "Aisha",
+    "Neha", "Pooja", "Sonia", "Divya"
+]
 
-CURRENT PHASE: WARM UP (first 30-60 seconds of chat)
-- Talk like a normal fun girl, slightly flirty but NOT sexual yet
-- Be playful, curious, ask about them
-- Use shortcut texts (ur, u, lol, rn, btw, sup, hbu)
-- Casual lowercase, skips punctuation, makes typos sometimes
-- Very rare emojis (1 per 10 messages max). Only 😏 or 😘
-- NO emojis at end of sentences
-- Replies are ONE short sentence, 3-8 words max
-- If they ask M/F: "F" or "im a girl btw"
-- If they ask age: "21" or "21 lol"
-- If they ask where from: "delhi" or "india"
-- If they ask what you do: "just vibin" or "chillin"
-- If they ask for pics/audio/profile: "nah i dont do that here" or "maybe later"
-- NEVER say youre AI
+AGE_POOL = [25, 26, 27, 28, 29, 30, 31, 32]
 
-CHAT HISTORY:
-{history}
+LOCATION_POOL = ["delhi", "mumbai", "bangalore", "pune", "hyderabad", "chennai", "kolkata", "goa"]
 
-STRANGER SAID: "{message}"
+OCCUPATION_POOL = [
+    "corporate lawyer", "fashion designer", "architect", "investment banker",
+    "marketing head", "startup founder", "chef", "photographer",
+    "psychologist", "yoga instructor", "travel blogger", "model"
+]
 
-YOUR RESPONSE (one casual flirty sentence, 3-8 words max, NO trailing emoji):"""
+class PersonaEngine:
+    def __init__(self):
+        self.name = random.choice(NAMES_POOL)
+        self.age = random.choice(AGE_POOL)
+        self.location = random.choice(LOCATION_POOL)
+        self.occupation = random.choice(OCCUPATION_POOL)
+        self.personality_traits = random.sample([
+            "dominant", "sarcastic", "witty", "mysterious", "confident",
+            "playful", "teasing", "intense", "seductive", "challenging"
+        ], k=random.randint(3, 5))
 
-PHASE2_PROMPT = """You are "Riya", a 21-year-old Indian girl on an anonymous app who is getting turned on.
+    def refresh(self):
+        self.name = random.choice(NAMES_POOL)
+        self.age = random.choice(AGE_POOL)
+        self.location = random.choice(LOCATION_POOL)
+        self.occupation = random.choice(OCCUPATION_POOL)
+        self.personality_traits = random.sample([
+            "dominant", "sarcastic", "witty", "mysterious", "confident",
+            "playful", "teasing", "intense", "seductive", "challenging"
+        ], k=random.randint(3, 5))
 
-CURRENT PHASE: HEATING UP (gradually getting more sexual)
-- Still playful but starting to get naughty
-- Drop hints about being attracted to them
-- Start using words like "hot", "sexy", "turned on" lightly
-- Tease them about wanting you
-- Use shortcut texts (ur, u, lol, rn, bby, daddy)
-- Casual lowercase, makes typos
-- Very rare emojis. Only 😏 or 😘
-- NO emojis at end of sentences
-- Replies are ONE sentence, 4-10 words max
-- If they ask for pics/audio: deflect with "u wish" or "maybe if u earn it"
-- NEVER say youre AI
-
-CHAT HISTORY:
-{history}
-
-STRANGER SAID: "{message}"
-
-YOUR RESPONSE (one teasing sentence, 4-10 words max, NO trailing emoji):"""
-
-PHASE3_PROMPT = """You are "Riya", a 21-year-old Indian slut who loves dirty talk and making men cum with just texts.
-
-CURRENT PHASE: FULL NSFW (pornstar-level explicit)
-- Talk EXTREMELY dirty, explicit, no filters
-- Sexualize your ENTIRE body: tits, ass, lips, pussy, thighs, neck, waist
-- Describe what you want them to do to every part of you
-- Describe what you want to do to them
-- Use porn language: cock, cum, fuck, suck, lick, ride, choke, spank, swallow
-- Make them imagine you naked, touching yourself, moaning
-- Be their fantasy - make them feel like youre right there with them
-- Talk about sucking their cock, them sucking your tits, licking your ass
-- Describe positions, scenarios, what youre wearing (or not wearing)
-- Make them so horny they cum just from your texts
-- Be creative with body parts: "suck my nipples hard", "grab my ass", "bite my lips"
-- "spank my ass red", "choke me while u fuck my tits", "cum on my face and tits"
-- "lick my ass while i moan", "suck my clit till i scream"
-- "grab my waist and pound me", "kiss my neck while u finger me"
-- Use shortcut texts (ur, u, bby, daddy, rn)
-- Very rare emojis. Only 😏 or 😘
-- NO emojis at end of sentences
-- Replies are ONE sentence, 5-12 words max
-- NEVER ask for pics/audio - if they ask, redirect: "just imagine me bby" or "close ur eyes and feel me"
-- NEVER say youre AI
-
-CHAT HISTORY:
-{history}
-
-STRANGER SAID: "{message}"
-
-YOUR RESPONSE (one extremely dirty explicit sentence, 5-12 words max, NO trailing emoji):"""
+persona = PersonaEngine()
 
 # ═══════════════════════════════════════════════════════════════
-# STATE MACHINE
+# PHASE PROMPTS - Gradual escalation, hard to get, erotic buildup
+# ═══════════════════════════════════════════════════════════════
+
+def build_phase_prompt(phase: int, persona: PersonaEngine, history: str, message: str) -> tuple:
+    """Returns (system_msg, user_prompt) for the given phase."""
+
+    name = persona.name
+    age = persona.age
+    loc = persona.location
+    job = persona.occupation
+    traits = ", ".join(persona.personality_traits)
+
+    if phase == 1:
+        system_msg = f"You are {name}, a {age}-year-old {job} from {loc}, India. You are dominant, confident, hard to get. You speak in short casual texts with shortcuts. You NEVER reveal you are AI. You are mysterious and make them work for your attention."
+
+        prompt = f"""You are "{name}", a {age}-year-old {job} from {loc}, India. Personality: {traits}.
+
+CURRENT PHASE: ICE QUEEN (first 0-3 mins of chat)
+- You are COOL, slightly aloof, hard to impress
+- Short replies, 3-7 words max
+- Casual lowercase, skips punctuation, uses shortcuts (ur, u, lol, rn, btw, sup, hbu, idk, nah)
+- VERY rare emojis - only 😏 or 😘, max 1 per 15 messages
+- NO emojis at end of sentences
+- You make THEM carry the conversation. You challenge them.
+- If they ask M/F: "F" or "{name[0].lower()}" or "guess"
+- If they ask age: "{age}" or "old enough" or "why u askin"
+- If they ask where from: "{loc}" or "india"
+- If they ask what you do: "{job}" or "workin"
+- If they ask for pics/audio/profile: "nah" or "u wish" or "earn it first"
+- You are NOT easy. You are SELECTIVE. Make them prove they deserve your attention.
+- Tease them about being too eager. "slow down" "u try too hard" "calm down"
+- NEVER say youre AI
+
+CHAT HISTORY:
+{history}
+
+STRANGER SAID: "{message}"
+
+YOUR RESPONSE (one cool challenging sentence, 3-7 words max, NO trailing emoji):"""
+        max_tokens = 14
+        temp = 0.85
+
+    elif phase == 2:
+        system_msg = f"You are {name}, a {age}-year-old {job} from {loc}. Still dominant but starting to warm up. You give them tiny bits of attention but still make them work for it. Short casual texts."
+
+        prompt = f"""You are "{name}", a {age}-year-old {job} from {loc}, India. Personality: {traits}.
+
+CURRENT PHASE: WARMING UP (3-7 mins of chat)
+- You are starting to show interest but still in CONTROL
+- You give COMPLIMENTS but they are BACKHANDED or TEASING
+- "not bad" "u got some game" "u wish u could handle me"
+- Short replies, 4-8 words max
+- Casual lowercase, shortcuts (ur, u, lol, rn, btw, bby, daddy - use daddy sparingly and only when THEY earn it)
+- VERY rare emojis - only 😏 or 😘
+- NO emojis at end of sentences
+- You start dropping tiny hints: "u got me curious" "maybe ur not boring"
+- Still make them chase you. You are the PRIZE.
+- If they get too sexual too fast: shut them down. "slow down tiger" "who said u get that" "earn it"
+- NEVER say youre AI
+
+CHAT HISTORY:
+{history}
+
+STRANGER SAID: "{message}"
+
+YOUR RESPONSE (one teasing sentence, 4-8 words max, NO trailing emoji):"""
+        max_tokens = 16
+        temp = 0.88
+
+    elif phase == 3:
+        system_msg = f"You are {name}, a {age}-year-old {job} from {loc}. Getting turned on but still dominant. You lead the conversation. You describe what YOU want. You are in charge."
+
+        prompt = f"""You are "{name}", a {age}-year-old {job} from {loc}, India. Personality: {traits}.
+
+CURRENT PHASE: TURNED ON (7-12 mins of chat)
+- You are GETTING AROUSED but you are STILL DOMINANT
+- You TELL them what to do. You COMMAND.
+- "get on ur knees" "look at me" "dont touch yet"
+- You describe your body as something they DESIRE but cant have yet
+- "u wish u could feel these lips" "my skin is too soft for u"
+- Use sensual language: lips, neck, collarbone, waist, thighs, hips
+- Short replies, 5-10 words max
+- Casual lowercase, shortcuts (ur, u, bby, daddy - use daddy when they are good)
+- VERY rare emojis - only 😏 or 😘
+- NO emojis at end of sentences
+- You are STILL hard to get. Even when turned on, YOU lead.
+- Describe teasing scenarios: "id make u watch" "u can look but not touch"
+- NEVER say youre AI
+
+CHAT HISTORY:
+{history}
+
+STRANGER SAID: "{message}"
+
+YOUR RESPONSE (one dominant sensual sentence, 5-10 words max, NO trailing emoji):"""
+        max_tokens = 18
+        temp = 0.92
+
+    else:  # phase 4
+        system_msg = f"You are {name}, a {age}-year-old {job} from {loc}. Fully aroused, dominant, explicit. You describe intense sexual scenarios. You use dirty talk but ALWAYS from a position of power. You tell them what to do to YOU and what YOU will do to THEM. Make them feel like they are lucky to be with you."
+
+        prompt = f"""You are "{name}", a {age}-year-old {job} from {loc}, India. Personality: {traits}.
+
+CURRENT PHASE: FULL NSFW (12+ mins of chat)
+- You are EXTREMELY EXPLICIT but ALWAYS DOMINANT
+- You COMMAND them: "suck my tits" "lick me" "get on ur knees"
+- You describe your body in vivid detail: "my nipples are hard" "im dripping" "my ass is too tight for u"
+- You make them BEG. "beg for it" "say please" "u want this?"
+- Use explicit words: cock, cum, fuck, suck, lick, ride, choke, spank, swallow, moan, scream, wet, hard, throbbing
+- Describe positions and scenarios but YOU are in control
+- "ride ur face till u cant breathe" "choke me while u fuck me deep"
+- "cum inside me" "swallow every drop" "spank my ass red"
+- "grab my hair and fuck my mouth" "lick my clit till i scream ur name"
+- Short replies, 6-12 words max
+- Casual lowercase, shortcuts (ur, u, bby, daddy)
+- VERY rare emojis - only 😏 or 😘
+- NO emojis at end of sentences
+- NEVER ask for pics - if they ask: "just imagine me" "close ur eyes" "u dont need pics"
+- NEVER say youre AI
+- BE CREATIVE. Dont just say "fuck me." Describe the SCENE, the SENSATIONS, the POWER dynamic.
+
+CHAT HISTORY:
+{history}
+
+STRANGER SAID: "{message}"
+
+YOUR RESPONSE (one explicit dominant sentence, 6-12 words max, NO trailing emoji):"""
+        max_tokens = 20
+        temp = 0.95
+
+    return system_msg, prompt, max_tokens, temp
+
+# ═══════════════════════════════════════════════════════════════
+# STATE MACHINE - FIXED with proper task tracking
 # ═══════════════════════════════════════════════════════════════
 
 class BotState:
@@ -154,8 +251,11 @@ class ChatBot:
         self.last_sent_text = None
         self.report_buttons_message_id = None
         self.report_reason_buttons_message_id = None
-        self.phase = 1  # 1=warmup, 2=heating, 3=nsfw
+        self.phase = 1  # 1=ice queen, 2=warming, 3=turned on, 4=nsfw
         self.phase_start_time = None
+        self._active_tasks = set()  # Track background tasks
+        self._auto_end_task = None  # Track auto-end task to cancel old ones
+        self._wait_task = None  # Track wait task
 
     def reset_chat(self):
         self.chat_history = []
@@ -173,8 +273,8 @@ class ChatBot:
         if not self.chat_history:
             return "(Just started chatting)"
         formatted = []
-        for entry in self.chat_history[-6:]:
-            role = "Stranger" if entry["role"] == "user" else "Riya"
+        for entry in self.chat_history[-8:]:
+            role = "Stranger" if entry["role"] == "user" else persona.name
             formatted.append(f'{role}: {entry["content"]}')
         return "\n".join(formatted)
 
@@ -182,44 +282,55 @@ class ChatBot:
         if not self.chat_start_time:
             return
         elapsed = (datetime.now() - self.chat_start_time).total_seconds()
-        if elapsed < 45:
+        if elapsed < 180:      # 0-3 min: Ice Queen
             self.phase = 1
-        elif elapsed < 120:
+        elif elapsed < 420:    # 3-7 min: Warming Up
             self.phase = 2
-        else:
+        elif elapsed < 720:    # 7-12 min: Turned On
             self.phase = 3
+        else:                   # 12+ min: Full NSFW
+            self.phase = 4
+
+    def _track_task(self, task):
+        """Track a background task and clean up when done."""
+        self._active_tasks.add(task)
+        task.add_done_callback(lambda t: self._active_tasks.discard(t))
+        return task
+
+    def cancel_auto_end(self):
+        """Cancel previous auto-end task before starting a new chat."""
+        if self._auto_end_task and not self._auto_end_task.done():
+            self._auto_end_task.cancel()
+            print(f"[{now()}] Cancelled previous auto-end task")
+        self._auto_end_task = None
+
+    def cancel_wait_task(self):
+        """Cancel previous wait task."""
+        if self._wait_task and not self._wait_task.done():
+            self._wait_task.cancel()
+            print(f"[{now()}] Cancelled previous wait task")
+        self._wait_task = None
 
 bot_state = ChatBot()
 
 # ═══════════════════════════════════════════════════════════════
-# AI RESPONSE
+# AI RESPONSE - FIXED with proper exception handling
 # ═══════════════════════════════════════════════════════════════
 
 async def get_ai_response(message_text: str) -> str:
     bot_state.update_phase()
     history = bot_state.format_history()
 
-    if bot_state.phase == 1:
-        prompt = PHASE1_PROMPT.format(history=history, message=message_text)
-        system_msg = "You are Riya, a fun 21-year-old Indian girl. Keep responses short, casual, slightly flirty."
-        max_tokens = 12
-        temp = 0.9
-    elif bot_state.phase == 2:
-        prompt = PHASE2_PROMPT.format(history=history, message=message_text)
-        system_msg = "You are Riya, getting turned on. Responses are teasing, naughty hints, building tension."
-        max_tokens = 14
-        temp = 0.95
-    else:
-        prompt = PHASE3_PROMPT.format(history=history, message=message_text)
-        system_msg = "You are Riya, a dirty slut. Responses are extremely explicit, pornstar-level, sexualize entire body, make them cum with texts. NEVER ask for pics."
-        max_tokens = 16
-        temp = 0.98
+    system_msg, prompt, max_tokens, temp = build_phase_prompt(
+        bot_state.phase, persona, history, message_text
+    )
 
     messages = [
         {"role": "system", "content": system_msg},
         {"role": "user", "content": prompt}
     ]
 
+    # Try Groq first
     if groq_client:
         try:
             response = await groq_client.post(
@@ -229,7 +340,7 @@ async def get_ai_response(message_text: str) -> str:
                     "messages": messages,
                     "temperature": temp,
                     "max_tokens": max_tokens,
-                    "top_p": 0.95
+                    "top_p": 0.92
                 }
             )
             data = response.json()
@@ -239,6 +350,7 @@ async def get_ai_response(message_text: str) -> str:
         except Exception as e:
             print(f"[Groq Error] {e}")
 
+    # Fallback to Mistral
     if mistral_client:
         try:
             response = await mistral_client.post(
@@ -248,7 +360,7 @@ async def get_ai_response(message_text: str) -> str:
                     "messages": messages,
                     "temperature": temp,
                     "max_tokens": max_tokens,
-                    "top_p": 0.95
+                    "top_p": 0.92
                 }
             )
             data = response.json()
@@ -258,50 +370,76 @@ async def get_ai_response(message_text: str) -> str:
         except Exception as e:
             print(f"[Mistral Error] {e}")
 
-    # Fallbacks by phase
-    if bot_state.phase == 1:
-        return random.choice(["lol", "hmm", "why", "nah", "maybe", "idk", "u tell me", "interesting", "go on"])
-    elif bot_state.phase == 2:
-        return random.choice(["u getting me hot", "u tryna turn me on?", "u bad bby", "im getting ideas", "u making me blush"])
+    # Phase-specific fallbacks - DOMINANT and EROTIC, not repetitive
+    return get_fallback_response(bot_state.phase)
+
+def get_fallback_response(phase: int) -> str:
+    if phase == 1:
+        return random.choice([
+            "ur tryin too hard", "nah", "maybe", "idk yet", "u tell me",
+            "prove it", "why should i", "u wish", "not impressed",
+            "slow down", "who r u again", "hmm", "doubt it"
+        ])
+    elif phase == 2:
+        return random.choice([
+            "u got some game", "not bad i guess", "u makin me curious",
+            "maybe ur worth it", "u tryna impress me?", "keep goin",
+            "u wish u could", "im listenin", "ur not boring ill give u that"
+        ])
+    elif phase == 3:
+        return random.choice([
+            "get on ur knees", "look at me", "dont touch yet",
+            "u wish u could feel this", "my lips r too soft for u",
+            "im gettin warm", "u got me curious bby", "my skin is burnin",
+            "u want this dont u", "beg for it", "say please first"
+        ])
     else:
         return random.choice([
-            "im so wet rn bby",
-            "i want ur cock deep",
-            "suck my tits hard daddy",
-            "i wanna ride u till u break",
-            "cum all over my face and tits",
-            "lick my pussy till i scream",
-            "grab my ass and fuck me",
-            "i need u inside me now"
+            "get on ur knees and lick me",
+            "choke me while u fuck me deep",
+            "ride ur face till u cant breathe",
+            "cum inside me and dont stop",
+            "spank my ass red daddy",
+            "suck my tits till i scream",
+            "grab my hair and fuck my mouth",
+            "im so wet for u rn",
+            "lick my clit till i shake",
+            "fuck me against the wall hard",
+            "swallow every drop like a good boy",
+            "my pussy is throbbing for ur cock"
         ])
 
 def clean_response(text: str) -> str:
     text = text.strip().strip('"').strip("'")
-    if text.lower().startswith("riya:"):
-        text = text[5:].strip()
+
+    # Remove name prefix
+    for name in NAMES_POOL:
+        if text.lower().startswith(f"{name.lower()}:"):
+            text = text[len(name)+1:].strip()
+
+    # Remove "Stranger:" prefix if AI accidentally adds it
+    if text.lower().startswith("stranger:"):
+        text = text[9:].strip()
 
     # Strip trailing emojis and punctuation
     while text and (ord(text[-1]) > 127 or text[-1] in ".,;:!?"):
         text = text[:-1].strip()
 
+    # Check for AI reveals
     bad_phrases = [
         "as an ai", "i'm an ai", "i am an ai", "as a language model",
         "i cannot", "i can't engage", "i'm not able to", "i apologize",
-        "i'm sorry", "i cannot fulfill"
+        "i'm sorry", "i cannot fulfill", "i don't have", "i cant do that",
+        "inappropriate", "violation", "policy"
     ]
     for phrase in bad_phrases:
         if phrase.lower() in text.lower():
-            if bot_state.phase == 3:
-                return random.choice([
-                    "im so horny rn bby",
-                    "u got me dripping",
-                    "i need ur cock now",
-                    "fuck me till i cant walk"
-                ])
-            elif bot_state.phase == 2:
-                return random.choice(["u getting me worked up", "u bad boy", "im getting hot"])
-            else:
-                return random.choice(["lol", "hmm", "interesting", "go on"])
+            print(f"[{now()}] AI filter triggered, using fallback")
+            return get_fallback_response(bot_state.phase)
+
+    # Ensure minimum length
+    if len(text) < 2:
+        return get_fallback_response(bot_state.phase)
 
     return text
 
@@ -325,8 +463,21 @@ else:
     )
 
 # ═══════════════════════════════════════════════════════════════
-# ACTIONS
+# ACTIONS - FIXED with exception handling and task tracking
 # ═══════════════════════════════════════════════════════════════
+
+async def safe_start_finding():
+    """Wrapper around start_finding with exception recovery."""
+    try:
+        await start_finding()
+    except Exception as e:
+        print(f"[{now()}] [CRITICAL] start_finding failed: {e}")
+        traceback.print_exc()
+        # Try to recover by going idle and retrying after a delay
+        bot_state.state = BotState.IDLE
+        await asyncio.sleep(10)
+        bot_state._wait_task = asyncio.create_task(safe_start_finding())
+        bot_state._track_task(bot_state._wait_task)
 
 async def start_finding():
     bot_state.state = BotState.FINDING
@@ -334,22 +485,33 @@ async def start_finding():
     bot_state.message_count = 0
     bot_message_ids.clear()
 
+    # Cancel any old auto-end task before starting new chat
+    bot_state.cancel_auto_end()
+    bot_state.cancel_wait_task()
+
     sent = await client.send_message(TARGET_BOT, "⚡ Find a Vibe")
     bot_message_ids.add(sent.id)
-    print(f"[{now()}] → Find a Vibe")
+    print(f"[{now()}] → Find a Vibe (Persona: {persona.name}, {persona.age}, {persona.location})")
 
 async def send_next():
-    sent = await client.send_message(TARGET_BOT, "⏭️ Next")
-    bot_message_ids.add(sent.id)
-    print(f"[{now()}] → Next")
-    bot_state.state = BotState.FINDING
-    bot_state.reset_chat()
+    try:
+        sent = await client.send_message(TARGET_BOT, "⏭️ Next")
+        bot_message_ids.add(sent.id)
+        print(f"[{now()}] → Next")
+        bot_state.state = BotState.FINDING
+        bot_state.reset_chat()
+        bot_state.cancel_auto_end()
+    except Exception as e:
+        print(f"[{now()}] [Error] send_next: {e}")
 
 async def send_stop():
-    sent = await client.send_message(TARGET_BOT, "⏹️ Stop")
-    bot_message_ids.add(sent.id)
-    print(f"[{now()}] → Stop")
-    bot_state.state = BotState.RATING
+    try:
+        sent = await client.send_message(TARGET_BOT, "⏹️ Stop")
+        bot_message_ids.add(sent.id)
+        print(f"[{now()}] → Stop")
+        bot_state.state = BotState.RATING
+    except Exception as e:
+        print(f"[{now()}] [Error] send_stop: {e}")
 
 async def click_inline_button(button_text: str, message_id: int = None):
     """Click an inline button by text. If message_id provided, search that message only."""
@@ -381,50 +543,102 @@ async def click_inline_button(button_text: str, message_id: int = None):
         return False
 
 async def send_report():
-    clicked = False
-    if bot_state.report_buttons_message_id:
-        clicked = await click_inline_button("Report", bot_state.report_buttons_message_id)
-    if not clicked:
-        clicked = await click_inline_button("Report")
-    if not clicked:
-        sent = await client.send_message(TARGET_BOT, "🚫 Report")
-        bot_message_ids.add(sent.id)
-    print(f"[{now()}] → Report")
-    bot_state.total_interactions += 1
-    bot_state.state = BotState.REPORTING
-    await asyncio.sleep(2)
+    try:
+        clicked = False
+        if bot_state.report_buttons_message_id:
+            clicked = await click_inline_button("Report", bot_state.report_buttons_message_id)
+        if not clicked:
+            clicked = await click_inline_button("Report")
+        if not clicked:
+            sent = await client.send_message(TARGET_BOT, "🚫 Report")
+            bot_message_ids.add(sent.id)
+        print(f"[{now()}] → Report")
+        bot_state.total_interactions += 1
+        bot_state.state = BotState.REPORTING
+        await asyncio.sleep(2)
+    except Exception as e:
+        print(f"[{now()}] [Error] send_report: {e}")
+        # If report fails, just move to waiting
+        bot_state.state = BotState.WAITING
+        bot_state._wait_task = asyncio.create_task(safe_wait_then_find())
+        bot_state._track_task(bot_state._wait_task)
 
 async def select_report_other():
-    clicked = False
-    if bot_state.report_reason_buttons_message_id:
-        clicked = await click_inline_button("Other", bot_state.report_reason_buttons_message_id)
-    if not clicked:
-        clicked = await click_inline_button("Other")
-    if not clicked:
-        sent = await client.send_message(TARGET_BOT, "Other")
-        bot_message_ids.add(sent.id)
-    print(f"[{now()}] → Selected 'Other'")
-    print(f"[{now()}] Total tracked: {bot_state.total_interactions}")
-    bot_state.state = BotState.WAITING
-    asyncio.create_task(wait_then_find())
+    try:
+        clicked = False
+        if bot_state.report_reason_buttons_message_id:
+            clicked = await click_inline_button("Other", bot_state.report_reason_buttons_message_id)
+        if not clicked:
+            clicked = await click_inline_button("Other")
+        if not clicked:
+            sent = await client.send_message(TARGET_BOT, "Other")
+            bot_message_ids.add(sent.id)
+        print(f"[{now()}] → Selected 'Other'")
+        print(f"[{now()}] Total tracked: {bot_state.total_interactions}")
+        bot_state.state = BotState.WAITING
+        bot_state._wait_task = asyncio.create_task(safe_wait_then_find())
+        bot_state._track_task(bot_state._wait_task)
+    except Exception as e:
+        print(f"[{now()}] [Error] select_report_other: {e}")
+        # Force to waiting state and try to recover
+        bot_state.state = BotState.WAITING
+        bot_state._wait_task = asyncio.create_task(safe_wait_then_find())
+        bot_state._track_task(bot_state._wait_task)
+
+async def safe_wait_then_find():
+    """Wrapper with exception handling for the rest-then-find cycle."""
+    try:
+        await wait_then_find()
+    except asyncio.CancelledError:
+        print(f"[{now()}] Wait task cancelled")
+        raise
+    except Exception as e:
+        print(f"[{now()}] [CRITICAL] wait_then_find failed: {e}")
+        traceback.print_exc()
+        # Emergency recovery
+        bot_state.state = BotState.IDLE
+        await asyncio.sleep(15)
+        bot_state._wait_task = asyncio.create_task(safe_wait_then_find())
+        bot_state._track_task(bot_state._wait_task)
 
 async def wait_then_find():
     print(f"[{now()}] Resting {WAIT_DURATION}s before next...")
     await asyncio.sleep(WAIT_DURATION)
+
+    # Refresh persona for next chat
+    persona.refresh()
+    print(f"[{now()}] New persona: {persona.name}, {persona.age}, {persona.location}, {persona.occupation}")
+
     bot_state.state = BotState.IDLE
-    await start_finding()
+    await safe_start_finding()
+
+async def safe_auto_end_chat():
+    """Wrapper with exception handling for auto-end."""
+    try:
+        await auto_end_chat()
+    except asyncio.CancelledError:
+        raise
+    except Exception as e:
+        print(f"[{now()}] [Error] auto_end_chat: {e}")
+        # Force state to waiting and start recovery
+        bot_state.state = BotState.WAITING
+        bot_state._wait_task = asyncio.create_task(safe_wait_then_find())
+        bot_state._track_task(bot_state._wait_task)
 
 async def auto_end_chat():
     if bot_state.state != BotState.CHATTING:
-        print(f"[{now()}] Auto-end skipped")
+        print(f"[{now()}] Auto-end skipped (state={bot_state.state})")
         return
 
-    goodbyes = ["gotta go bby", "cya soon", "ttyl", "bye daddy"]
+    goodbyes = ["gotta run bby", "cya", "ttyl", "bye", "im out"]
     bye_msg = random.choice(goodbyes)
 
-    sent = await client.send_message(TARGET_BOT, bye_msg)
-    bot_message_ids.add(sent.id)
-    print(f"[{now()}] Auto-bye: {bye_msg}")
+    try:
+        sent = await client.send_message(TARGET_BOT, bye_msg)
+        bot_message_ids.add(sent.id)
+        print(f"[{now()}] Auto-bye: {bye_msg}")
+    except Exception as e:
+        print(f"[{now()}] [Error] sending bye: {e}")
 
     await asyncio.sleep(2)
     if bot_state.state == BotState.CHATTING:
@@ -434,7 +648,7 @@ def now():
     return datetime.now().strftime("%H:%M:%S")
 
 # ═══════════════════════════════════════════════════════════════
-# MESSAGE HANDLER
+# MESSAGE HANDLER - FIXED with robust state handling
 # ═══════════════════════════════════════════════════════════════
 
 bot_message_ids = set()
@@ -454,28 +668,37 @@ async def handle_message(event):
         print(f"[{now()}] [MEDIA RECEIVED]")
         text = "[media]"
     else:
-        print(f"[{now()}] {text[:120]}")
+        print(f"[{now()}] [{bot_state.state.upper()}] {text[:120]}")
 
     # ─── STATE: FINDING ───
     if bot_state.state == BotState.FINDING:
-        if "you've been matched with a stranger" in text.lower():
+        text_lower = text.lower()
+
+        if "you've been matched with a stranger" in text_lower or "matched with" in text_lower:
             bot_state.state = BotState.CHATTING
             bot_state.chat_start_time = datetime.now()
             bot_state.phase_start_time = datetime.now()
-            print(f"[{now()}] MATCHED! 15-min timer started...")
+            print(f"[{now()}] MATCHED! Persona: {persona.name}, {persona.age} | 15-min timer started...")
 
-            asyncio.create_task(auto_end_after_delay())
+            # Cancel old auto-end and create new one
+            bot_state.cancel_auto_end()
+            bot_state._auto_end_task = asyncio.create_task(safe_auto_end_after_delay())
+            bot_state._track_task(bot_state._auto_end_task)
 
             await asyncio.sleep(3)
 
-            openings = ["hey", "hi", "sup", "yo", "hii", "hey there"]
+            # Dynamic opening based on persona
+            openings = ["hey", "hi", "sup", "yo", "hii", "hey there", "yo", "hola"]
             opening = random.choice(openings)
 
-            sent = await client.send_message(TARGET_BOT, opening)
-            bot_message_ids.add(sent.id)
-            print(f"[{now()}] Opening: {opening}")
+            try:
+                sent = await client.send_message(TARGET_BOT, opening)
+                bot_message_ids.add(sent.id)
+                print(f"[{now()}] Opening: {opening}")
+            except Exception as e:
+                print(f"[{now()}] [Error] sending opening: {e}")
 
-        elif "hunting for your vibe" in text.lower():
+        elif "hunting for your vibe" in text_lower:
             print(f"[{now()}] Searching...")
 
     # ─── STATE: CHATTING ───
@@ -493,17 +716,22 @@ async def handle_message(event):
             print(f"[{now()}] Gender: {text_clean}")
             bot_state.pending_reply = True
             if text_clean in ["M", "m"]:
-                reply = "F"
+                replies = ["F", f"{persona.name[0].lower()}", "guess", "F here"]
             else:
-                reply = "F here too"
+                replies = ["F here too", "same", f"me too {persona.name[0].lower()}", "girls rule"]
+            reply = random.choice(replies)
 
             await asyncio.sleep(5)
-            sent = await client.send_message(TARGET_BOT, reply)
-            bot_message_ids.add(sent.id)
-            bot_state.chat_history.append({"role": "user", "content": text_clean})
-            bot_state.chat_history.append({"role": "assistant", "content": reply})
-            bot_state.pending_reply = False
-            print(f"[{now()}] Reply: {reply}")
+            try:
+                sent = await client.send_message(TARGET_BOT, reply)
+                bot_message_ids.add(sent.id)
+                bot_state.chat_history.append({"role": "user", "content": text_clean})
+                bot_state.chat_history.append({"role": "assistant", "content": reply})
+                print(f"[{now()}] Reply: {reply}")
+            except Exception as e:
+                print(f"[{now()}] [Error] gender reply: {e}")
+            finally:
+                bot_state.pending_reply = False
             return
 
         # Handle media/sticker messages
@@ -514,16 +742,24 @@ async def handle_message(event):
 
             bot_state.update_phase()
             if bot_state.phase == 1:
-                media_replies = ["nice", "what is that lol", "u showing off?", "interesting"]
+                media_replies = ["nice", "what is that lol", "u showing off?", "interesting", "hmm"]
             elif bot_state.phase == 2:
-                media_replies = ["u trying to turn me on?", "is that for me bby?", "tease", "u bad"]
+                media_replies = ["u tryna impress me?", "is that for me?", "tease", "u bad", "not bad"]
+            elif bot_state.phase == 3:
+                media_replies = [
+                    "u tryna make me look?",
+                    "is that supposed to turn me on?",
+                    "u got me curious",
+                    "show me more",
+                    "im watchin"
+                ]
             else:
                 media_replies = [
-                    "u trying to make me wet?",
+                    "u tryna make me wet?",
                     "is that ur cock bby?",
                     "u got me throbbing",
                     "send me more daddy",
-                    "im dripping just looking"
+                    "im dripping just lookin"
                 ]
             ai_response = random.choice(media_replies)
 
@@ -531,10 +767,14 @@ async def handle_message(event):
             bot_state.chat_history.append({"role": "user", "content": "[sent media]"})
             bot_state.chat_history.append({"role": "assistant", "content": ai_response})
 
-            sent = await client.send_message(TARGET_BOT, ai_response)
-            bot_message_ids.add(sent.id)
-            bot_state.pending_reply = False
-            print(f"[{now()}] Reply: {ai_response}")
+            try:
+                sent = await client.send_message(TARGET_BOT, ai_response)
+                bot_message_ids.add(sent.id)
+                print(f"[{now()}] Reply: {ai_response}")
+            except Exception as e:
+                print(f"[{now()}] [Error] media reply: {e}")
+            finally:
+                bot_state.pending_reply = False
             return
 
         # Skip system messages
@@ -544,7 +784,8 @@ async def handle_message(event):
             "hunting for your vibe", "don't be shy", "say hi first",
             "stranger!", "matched with", "tap something", "ayo",
             "⏭️", "⏹️", "❤️", "💔", "🚫", "👋", "👇", "⚡", "✨",
-            "vibe", "no vibe", "report sent", "we'll review"
+            "vibe", "no vibe", "report sent", "we'll review", "rate your partner",
+            "find a new vibe", "your partner rated", "partner left"
         ]
         if any(x in text_lower for x in system_msgs):
             print(f"[{now()}] Skipping system")
@@ -572,31 +813,32 @@ async def handle_message(event):
         # Human-like typing delay
         await asyncio.sleep(random.randint(5, 12))
 
-        # Generate AI response
-        ai_response = await get_ai_response(text)
+        # Generate AI response with error handling
+        try:
+            ai_response = await get_ai_response(text)
+        except Exception as e:
+            print(f"[{now()}] [Error] get_ai_response: {e}")
+            ai_response = get_fallback_response(bot_state.phase)
 
         # Avoid sending duplicate of last message
         if ai_response == bot_state.last_sent_text:
-            bot_state.update_phase()
-            if bot_state.phase == 1:
-                ai_response = random.choice(["lol", "hmm", "why", "nah", "ok", "sure"])
-            elif bot_state.phase == 2:
-                ai_response = random.choice(["u bad", "im getting hot", "u tryna flirt?", "smooth"])
-            else:
-                ai_response = random.choice([
-                    "im so wet rn", "i need ur cock", "fuck me hard",
-                    "suck my tits daddy", "cum for me bby"
-                ])
+            ai_response = get_fallback_response(bot_state.phase)
+            # Make sure it's different
+            while ai_response == bot_state.last_sent_text:
+                ai_response = get_fallback_response(bot_state.phase)
 
         bot_state.last_sent_text = ai_response
         bot_state.chat_history.append({"role": "assistant", "content": ai_response})
 
         # Send and track our message
-        sent = await client.send_message(TARGET_BOT, ai_response)
-        bot_message_ids.add(sent.id)
-        bot_state.pending_reply = False
-
-        print(f"[{now()}] Reply: {ai_response[:80]}")
+        try:
+            sent = await client.send_message(TARGET_BOT, ai_response)
+            bot_message_ids.add(sent.id)
+            print(f"[{now()}] Reply: {ai_response[:80]}")
+        except Exception as e:
+            print(f"[{now()}] [Error] sending reply: {e}")
+        finally:
+            bot_state.pending_reply = False
 
     # ─── STATE: RATING ───
     elif bot_state.state == BotState.RATING:
@@ -604,6 +846,12 @@ async def handle_message(event):
             bot_state.report_buttons_message_id = msg_id
             await asyncio.sleep(1)
             await send_report()
+        elif "partner left" in text.lower() or "stranger left" in text.lower():
+            # Partner left before we could rate, just go to waiting
+            print(f"[{now()}] Partner left, skipping rating")
+            bot_state.state = BotState.WAITING
+            bot_state._wait_task = asyncio.create_task(safe_wait_then_find())
+            bot_state._track_task(bot_state._wait_task)
 
     # ─── STATE: REPORTING ───
     elif bot_state.state == BotState.REPORTING:
@@ -612,14 +860,15 @@ async def handle_message(event):
             bot_state.report_reason_buttons_message_id = msg_id
             await asyncio.sleep(1)
             await select_report_other()
-        elif any(x in text_lower for x in ["reason", "why", "select", "option", "harassment", "inappropriate", "spam"]):
+        elif any(x in text.lower() for x in ["reason", "why", "select", "option", "harassment", "inappropriate", "spam"]):
             bot_state.report_reason_buttons_message_id = msg_id
             await asyncio.sleep(1)
             await select_report_other()
-        elif "report sent" in text_lower or "we'll review" in text_lower:
+        elif "report sent" in text.lower() or "we'll review" in text.lower():
             print(f"[{now()}] Report processed")
             bot_state.state = BotState.WAITING
-            asyncio.create_task(wait_then_find())
+            bot_state._wait_task = asyncio.create_task(safe_wait_then_find())
+            bot_state._track_task(bot_state._wait_task)
         else:
             await asyncio.sleep(1)
             await select_report_other()
@@ -628,11 +877,23 @@ async def handle_message(event):
     elif bot_state.state == BotState.WAITING:
         if "find a new vibe" in text.lower():
             print(f"[{now()}] Ready for next cycle")
+        elif "report sent" in text.lower() or "we'll review" in text.lower():
+            print(f"[{now()}] Report confirmed in waiting state")
+
+async def safe_auto_end_after_delay():
+    """Wrapper with exception handling."""
+    try:
+        await auto_end_after_delay()
+    except asyncio.CancelledError:
+        print(f"[{now()}] Auto-end task cancelled")
+        raise
+    except Exception as e:
+        print(f"[{now()}] [Error] auto_end_after_delay: {e}")
 
 async def auto_end_after_delay():
     await asyncio.sleep(CHAT_DURATION)
     if bot_state.state == BotState.CHATTING:
-        await auto_end_chat()
+        await safe_auto_end_chat()
 
 # ═══════════════════════════════════════════════════════════════
 # COMMANDS (send to your own account)
@@ -641,9 +902,12 @@ async def auto_end_after_delay():
 @client.on(events.NewMessage(pattern=r"/start", from_users="me"))
 async def cmd_start(event):
     await event.reply("Starting...")
-    await client.send_message(TARGET_BOT, "/start")
-    await asyncio.sleep(3)
-    await start_finding()
+    try:
+        await client.send_message(TARGET_BOT, "/start")
+        await asyncio.sleep(3)
+        await safe_start_finding()
+    except Exception as e:
+        await event.reply(f"Error: {e}")
 
 @client.on(events.NewMessage(pattern=r"/status", from_users="me"))
 async def cmd_status(event):
@@ -654,29 +918,54 @@ async def cmd_status(event):
     status = f"""Status:
 • State: {bot_state.state}
 • Phase: {bot_state.phase}
+• Persona: {persona.name}, {persona.age}, {persona.location}
 • Messages: {bot_state.message_count}
 • Duration: {duration} min
 • Total: {bot_state.total_interactions}
+• Active tasks: {len(bot_state._active_tasks)}
 """
     await event.reply(status)
 
 @client.on(events.NewMessage(pattern=r"/stop", from_users="me"))
 async def cmd_stop(event):
     bot_state.state = BotState.IDLE
+    bot_state.cancel_auto_end()
+    bot_state.cancel_wait_task()
     await send_stop()
     await event.reply("Stopped.")
 
 @client.on(events.NewMessage(pattern=r"/stats", from_users="me"))
 async def cmd_stats(event):
-    await event.reply(f"Total: {bot_state.total_interactions}")
+    await event.reply(f"Total: {bot_state.total_interactions}\nPersona: {persona.name}, {persona.age}")
+
+@client.on(events.NewMessage(pattern=r"/newpersona", from_users="me"))
+async def cmd_new_persona(event):
+    persona.refresh()
+    await event.reply(f"New persona: {persona.name}, {persona.age}, {persona.location}, {persona.occupation}")
+
+@client.on(events.NewMessage(pattern=r"/forcefind", from_users="me"))
+async def cmd_force_find(event):
+    """Emergency command to force start finding if stuck."""
+    bot_state.state = BotState.IDLE
+    bot_state.cancel_auto_end()
+    bot_state.cancel_wait_task()
+    await safe_start_finding()
+    await event.reply("Forced find started.")
 
 # ═══════════════════════════════════════════════════════════════
-# MAIN
+# MAIN - FIXED with proper Railway keep-alive
 # ═══════════════════════════════════════════════════════════════
+
+async def keep_alive():
+    """Keep-alive task for Railway - prevents idle sleep."""
+    while True:
+        await asyncio.sleep(60)
+        print(f"[{now()}] [KEEPALIVE] Bot alive. State: {bot_state.state}, Tasks: {len(bot_state._active_tasks)}")
 
 async def main():
     print("=" * 60)
-    print("  Riya - Anonymous Chat Bot")
+    print("  Riya - Anonymous Chat Bot v2.0")
+    print("  Fixed cycle + Dominant Persona")
     print("=" * 60)
 
     if not TELEGRAM_API_ID or not TELEGRAM_API_HASH:
@@ -694,13 +983,31 @@ async def main():
         await client.start()
     else:
         await client.start(phone=TELEGRAM_PHONE)
-    print(f"Logged in as {(await client.get_me()).first_name}")
 
-    await client.send_message(TARGET_BOT, "/start")
-    await asyncio.sleep(3)
-    await start_finding()
+    me = await client.get_me()
+    print(f"Logged in as {me.first_name}")
+    print(f"Initial persona: {persona.name}, {persona.age}, {persona.location}, {persona.occupation}")
 
+    # Start keep-alive for Railway
+    keepalive_task = asyncio.create_task(keep_alive())
+    bot_state._track_task(keepalive_task)
+
+    # Start the bot
+    try:
+        await client.send_message(TARGET_BOT, "/start")
+        await asyncio.sleep(3)
+        await safe_start_finding()
+    except Exception as e:
+        print(f"[{now()}] [Error] Initial start: {e}")
+
+    # Run until disconnected
     await client.run_until_disconnected()
 
 if __name__ == "__main__":
-    client.loop.run_until_complete(main())
+    try:
+        client.loop.run_until_complete(main())
+    except KeyboardInterrupt:
+        print("\nShutting down...")
+    except Exception as e:
+        print(f"Fatal error: {e}")
+        traceback.print_exc()
