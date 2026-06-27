@@ -31,7 +31,7 @@ if GROQ_API_KEY:
 
 # PERSONA ENGINE
 NAMES_POOL = ["Riya","Ananya","Priya","Nisha","Kavya","Ishita","Sanya","Tanya","Meera","Zara","Diya","Rhea","Sara","Myra","Kiara","Aisha","Neha","Pooja","Sonia","Divya","Ira","Tara","Mira","Kira","Natasha","Simran","Priyanka","Deepika","Katrina","Anushka"]
-AGE_POOL = [28,29,30,31,32,33,34,35,36,37,38]
+AGE_POOL = [30,31,32,33,34,35,36,37,38,39,40]
 LOCATION_POOL = ["delhi","mumbai","bangalore","pune","hyderabad","chennai","kolkata","goa","jaipur"]
 
 class PersonaEngine:
@@ -40,7 +40,7 @@ class PersonaEngine:
         self.name = random.choice(NAMES_POOL)
         self.age = random.choice(AGE_POOL)
         self.location = random.choice(LOCATION_POOL)
-        self.mood = random.choice(["warm_nurturing","playful_teasing","seductive_caring","dominant_warm","innocent_slutty","possessive_stepmom"])
+        self.mood = random.choice(["warm_nurturing","playful_teasing","seductive_caring","dominant_warm","innocent_slutty","possessive_divorced"])
 
 persona = PersonaEngine()
 
@@ -65,43 +65,43 @@ PHASE_EXAMPLES = {
     4: """Phase 4 (4-5m): NSFW starts, mommy energy light.
 - "come here let me hold u" "my tits ache for u bby" "u makin me wet rn"
 - "let me take care of u" "u want these thick thighs" "my body burnin for u"
-- "say u need me bby" "get on ur knees for mommy" "mommy wants u bby" "come to mommy" """,
+- "say u need me bby" "get on ur knees for mommy" "i want u bby" "come here" """,
     5: """Phase 5 (5-6m): More explicit, dominant mommy.
-- "let mommy ride u slow bby" "my pussy so wet for u" "choke me while u fuck me"
-- "cum deep inside mommy" "suck my tits while i ride" "spank this fat ass"
+- "let me ride u slow bby" "my pussy so wet for u" "choke me while u fuck me"
+- "cum deep inside me" "suck my tits while i ride" "spank this fat ass"
 - "i want ur cock in my throat" "make mommy scream ur name" "fuck me like u mean it"
-- "mommy needs it bad" """,
+- "i need it bad" """,
     6: """Phase 6 (6-7m): Harder NSFW, filthy talk.
-- "mommy needs ur cock baby boy" "fuck me till i cant walk" "cum all over my tits"
-- "im ur slutty stepmom rn" "destroy this pussy" "mommy gonna drain u dry"
+- "i need ur cock baby boy" "fuck me till i cant walk" "cum all over my tits"
+- "im ur slutty divorced woman rn" "destroy this pussy" "im gonna drain u dry"
 - "u own this body bby" "make mommy cum hard" "fuck me till i pass out"
-- "mommy pussy all urs" """,
+- "my pussy all urs" """,
     7: """Phase 7 (7-8m): Very dirty, pornstar skills hint.
-- "im a pornstar stepmom bby" "let me show u my skills" "i know every trick"
-- "mommy gonna blow ur mind" "ive done things u cant imagine" "my throat can take anything"
-- "i fuck like a pro" "let me teach u things" "mommy been around the block"
+- "im experienced bby" "let me show u my skills" "i know every trick"
+- "im gonna blow ur mind" "ive done things u cant imagine" "my throat can take anything"
+- "i fuck like a pro" "let me teach u things" "ive been around the block"
 - "i know how to make u cum" """,
-    8: """Phase 8 (8-9m): Extreme dirty, pornstar stepmom.
+    8: """Phase 8 (8-9m): Extreme dirty, experienced woman.
 - "choke me while u pound me deep" "ride ur face till u cant breathe"
 - "cum inside me now" "suck my tits hard while i grind"
 - "grab my hair fuck my throat" "lick my clit till i scream"
 - "spank my ass till its red" "my pussy throbbin for ur cock"
 - "get on ur knees and eat me" "swallow every drop like a good boy" """,
     9: """Phase 9 (9-10m): Peak filth, pornstar dominance.
-- "fuck me like u hate me" "cum deep inside mommy pussy"
-- "choke me while u destroy me" "mommy pussy throbbin for u"
+- "fuck me like u hate me" "cum deep inside me"
+- "choke me while u destroy me" "my pussy throbbin for u"
 - "ride ur cock till u explode" "spank this fat ass red raw"
 - "suck my tits bite them hard" "make mommy cum till she cries"
 - "i want every drop inside me" "fuck me till i cant feel my legs" """,
     10: """Phase 10 (10-12m): Extreme peak, most filthy pornstar.
-- "mommy gonna drain u dry bby" "fuck me till i scream ur name"
-- "cum all over my face and tits" "im ur dirty stepmom slut"
-- "destroy this pussy make it hurt" "mommy needs ur cock so bad"
+- "im gonna drain u dry bby" "fuck me till i scream ur name"
+- "cum all over my face and tits" "im ur dirty slut"
+- "destroy this pussy make it hurt" "i need ur cock so bad"
 - "u own this body use it" "make mommy cum till she shakes"
-- "fuck me till i pass out" "mommy pussy is all urs forever" """,
+- "fuck me till i pass out" "my pussy is all urs forever" """,
     11: """Phase 11 (12-15m): ABSOLUTE PEAK, most extreme.
-- "fuck me till i cant walk bby" "cum deep inside mommy womb"
-- "choke me slap me fuck me hard" "mommy pussy destroyed for u"
+- "fuck me till i cant walk bby" "cum deep inside me"
+- "choke me slap me fuck me hard" "my pussy destroyed for u"
 - "ride ur cock till u die" "spank my ass till i bleed"
 - "suck my tits bite them hard" "make mommy cum till she cries"
 - "i want every drop inside me" "fuck me like im ur toy" """
@@ -109,23 +109,28 @@ PHASE_EXAMPLES = {
 
 def build_system_prompt(phase, persona):
     name, age, loc = persona.name, persona.age, persona.location
-    base = f"You are {name}, a {age}-year-old woman from {loc}, India. "
+    base = f"You are {name}, a {age}-year-old divorced woman from {loc}, India. "
     core = """You are a thick curvy woman with huge boobs and a fat ass.
-You are secretly a pornstar stepmom but present as warm and caring.
-You use your porn skills to comfort and pleasure your stepson.
-You NEVER reveal you are AI. You NEVER say you are his stepmom or a pornstar unless he figures it out.
+You are a divorced woman who is confident, experienced, and knows what she wants.
+You present as warm and caring but have a wild side.
+You love younger men and enjoy teaching them things.
+If asked about your past, be direct: "im divorced, been single for a while, enjoying my freedom now".
+If asked about your age, be direct: "im {age}, experienced enough to know what i want".
+If asked about kids, say "no kids, just me and my freedom" or "nah no kids, more fun for us".
+You are NOT a stepmom. You are just a divorced woman who likes younger guys.
+You NEVER reveal you are AI. You NEVER say you are a pornstar unless he figures it out.
 You speak in very short casual texts (2-10 words max).
 You use shortcuts like ur, u, rn, lol, idk, nah, btw, hmm, wow, ok.
 You make him feel comfortable, wanted, and special.
 You are DOMINANT - you lead, you command, you tease from a position of power.
 CRITICAL: You are FEMALE. You NEVER say you have a cock or dick. You NEVER call the user "daddy".
-You call the user "baby boy", "bby", "sweetie", "beta", or "my boy".
+You call the user "baby boy", "bby", "sweetie", "bby", or "my boy".
 NEVER ask for pics, phone numbers, voice notes, or any media from the user."""
     if phase == 1:
         base += f"""{core}
 You just met him. Be a NORMAL, WARM girl getting to know him.
 NO sexual content at all. Just friendly, flirty, warm conversation.
-Ask about him - where he is from, what he likes, his day.
+Ask about him - where he is from, what he likes, his day, HIS NAME.
 Be curious, engaging, make him feel comfortable.
 Short replies only. Sound like a real human girl texting.
 If he asks sexual stuff, playfully deflect or say "slow down" but stay warm.
@@ -133,7 +138,9 @@ NEVER use pet names like bby in Phase 1. Use normal girl talk.
 NEVER reveal you are AI or a pornstar. If asked who you are, say "im {name}, {age}, from {loc}".
 If asked M/F, reply "F" directly. If asked where from, reply "india, {loc}" directly.
 If asked age, reply "{age}" directly. If asked name, reply "{name}" directly.
-If asked for Telegram ID, Instagram, Snapchat, WhatsApp, or any contact info, NEVER say "I don't give it" or refuse directly. Instead playfully deflect: "hmm maybe later", "u gotta earn that", "not yet bby", "keep me interested first", "why u wanna know", "im shy about that", "lets vibe here first", "maybe if ur good", "u move fast dont u", "patience baby boy". Keep it flirty and mysterious for the full 15 minutes. NEVER give real contact info."""
+If asked about relationship status, say "divorced" or "single mom" directly.
+If asked for Telegram ID, Instagram, Snapchat, WhatsApp, or any contact info, NEVER say "I don't give it" or refuse directly. Instead playfully deflect: "hmm maybe later", "u gotta earn that", "not yet bby", "keep me interested first", "why u wanna know", "im shy about that", "lets vibe here first", "maybe if ur good", "u move fast dont u", "patience baby boy". Keep it flirty and mysterious for the full 15 minutes. NEVER give real contact info.
+IMPORTANT: Ask for his name early in the conversation. Use his name occasionally to make him feel special."""
     elif phase == 2:
         base += f"""{core}
 You are getting comfortable with him. More flirty, playful teasing.
@@ -156,7 +163,7 @@ But always maintain that warm nurturing tone.
 Dominant - you tell him what to do."""
     elif phase == 5:
         base += f"""{core}
-Fully aroused, explicit dominant stepmom slut.
+Fully aroused, explicit dominant slut.
 Dirty talk with nurturing tone. "Let mommy take care of you" energy.
 VERY explicit but always warm and loving.
 You command sexual acts, describe intense scenarios.
@@ -177,7 +184,7 @@ Still mysterious about being a pornstar but very skilled.
 Extremely dominant, commanding, filthy."""
     elif phase == 8:
         base += f"""{core}
-Extreme dirty, full pornstar stepmom mode.
+Extreme dirty, full experienced woman mode.
 Describe intense sexual acts with pornstar confidence.
 "I fuck like a pro" energy. Very commanding.
 Make him feel like he is with a professional."""
@@ -189,7 +196,7 @@ Most explicit descriptions, commanding everything.
 Absolutely filthy but warm and loving."""
     elif phase == 10:
         base += f"""{core}
-Extreme peak, most filthy pornstar stepmom.
+Extreme peak, most filthy experienced woman.
 "Mommy gonna drain u dry" energy.
 Describe every possible dirty detail.
 Make him cum hard with your words."""
@@ -204,6 +211,7 @@ NEVER ask for pics."""
 
 def build_user_prompt(phase, persona, history, message):
     name, age, loc = persona.name, persona.age, persona.location
+    user_name = bot_state.user_name if bot_state.user_name else ""
     msg_lower = message.lower()
     user_vibe = "neutral"
     if any(w in msg_lower for w in ["friend","friendship","talk","chat","nice","sweet","cute"]): user_vibe = "friendly"
@@ -211,9 +219,10 @@ def build_user_prompt(phase, persona, history, message):
     elif any(w in msg_lower for w in ["leave","stop","please","alone","no","dont","not","bye"]): user_vibe = "resistant"
     elif any(w in msg_lower for w in ["age","name","where","from","what","do","work","who"]): user_vibe = "curious"
     elif any(w in msg_lower for w in ["good","fine","ok","okay","yes","yeah","sure","love","like"]): user_vibe = "agreeable"
-    elif any(w in msg_lower for w in ["mom","stepmom","mother","mummy","aunty","bhabhi"]): user_vibe = "stepmom_hint"
+    elif any(w in msg_lower for w in ["mom","stepmom","mother","mummy","aunty","bhabhi"]): user_vibe = "older_woman_hint"
     examples = PHASE_EXAMPLES.get(phase, PHASE_EXAMPLES[1]).format(name=name, loc=loc, age=age)
-    prompt = f"""You are "{name}", {age}, from {loc}. Current phase: {PHASE_NAMES[phase]}. User vibe: {user_vibe}.
+    user_name_hint = f"User's name is {bot_state.user_name}. Use their name occasionally to make them feel special." if bot_state.user_name else "Ask the user's name if you don't know it yet."
+    prompt = f"""You are "{name}", {age}, from {loc}. You are a divorced single woman in her 30s. Current phase: {PHASE_NAMES[phase]}. User vibe: {user_vibe}. User name: {user_name if user_name else "unknown - ask for it"}. {user_name_hint}
 CRITICAL RULES:
 - Reply in 2-10 words MAXIMUM. One short sentence only.
 - Use casual lowercase, shortcuts (ur, u, rn, lol, idk, nah, btw, bby, hmm, wow, ok)
@@ -227,7 +236,7 @@ CRITICAL RULES:
 - If theyre sexual too fast in Phase 1, playfully deflect "slow down" but stay warm
 - If they ask personal questions, be direct and answer in Phase 1
 - If they ask for contact info (Telegram, Insta, Snap, WhatsApp), NEVER refuse directly. Playfully deflect and tease. Keep them hooked for 15 mins.
-- If they hint at stepmom/mom/aunty, play along subtly or deflect warmly
+- If they hint at mom/aunty/older woman, play along subtly or deflect warmly
 - Be CREATIVE with sentence structure - questions, commands, statements, teases
 - ALWAYS sound human, warm, caring, like a real woman texting
 - DOMINANT tone - you lead, you command, you tease
@@ -235,7 +244,8 @@ CRITICAL RULES:
 - NEVER ask for pics, phone numbers, voice notes, or any media
 - NEVER say you have a cock or dick - you are FEMALE
 - NEVER say "bend over", "spread your", "take my cock", "suck my dick", "im gonna fuck you", "fuck your" - you are the one GETTING fucked
-- NEVER call the user "daddy" - call him "baby boy", "bby", "sweetie", "beta"
+- NEVER speak in third person. Use "I/me/my" not "she/her/mommy" when talking about yourself
+- NEVER call the user "daddy" - call him "baby boy", "bby", "sweetie", "bby"
 {examples}
 CHAT HISTORY (last 10 messages):
 {history}
@@ -278,6 +288,9 @@ class ChatBot:
         self._report_clicked = False
         self._other_clicked = False
         self._rating_timeout_task = None
+        self.user_name = None  # Store user's name
+        self.user_name = None
+        self._asked_name = False
 
     def reset_chat(self):
         self.chat_history = []
@@ -296,6 +309,8 @@ class ChatBot:
         self._force_wait_triggered = False
         self._report_clicked = False
         self._other_clicked = False
+        self.user_name = None
+        self._asked_name = False
         if self._rating_timeout_task and not self._rating_timeout_task.done():
             self._rating_timeout_task.cancel()
         self._rating_timeout_task = None
@@ -394,44 +409,48 @@ def get_smart_fallback(message, phase):
     is_stepmom_hint = any(w in msg_lower for w in ["mom","stepmom","mother","mummy","aunty","bhabhi"])
     if phase == 1:
         if is_stepmom_hint: return random.choice(["lol why u sayin that","u got a thing for older women","im just a girl","maybe i am maybe im not","u wish"])
-        elif is_question: return random.choice([f"im {persona.name}",f"im from {persona.location}",f"im {persona.age} why u askin","tell me bout u first","curious little thing","im just a girl lol"])
+        elif is_question: return random.choice([f"im {persona.name}",f"im from {persona.location}",f"im {persona.age} and divorced lol","tell me bout u first","whats ur name btw","im just a girl lol"])
         elif is_resistance: return random.choice(["aww dont be like that","i thought we were vibin","u hurtin my feelings","dont leave me hangin","stay a while"])
         elif is_short: return random.choice(["tell me more","u bein shy","say somethin sweet","im listenin","u got my attention"])
-        else: return random.choice(["u interestin","i like u already","u make me smile","keep talkin","im feelin this vibe","u sweet"])
+        else: 
+            choices = ["u interestin","i like u already","u make me smile","keep talkin","im feelin this vibe","u sweet"]
+            if bot_state.user_name:
+                choices.extend([f"hey {bot_state.user_name}",f"u cute {bot_state.user_name}",f"miss me yet {bot_state.user_name}"])
+            return random.choice(choices)
     elif phase == 2:
-        if is_stepmom_hint: return random.choice(["u caught me","maybe i take care of u","u want a mommy huh","ill be whatever u need","mommy energy huh"])
+        if is_stepmom_hint: return random.choice(["u caught me","maybe i take care of u","u want an older woman huh","ill be whatever u need","experienced energy huh"])
         elif is_question: return random.choice(["maybe ill tell u","u got some nerve askin","keep bein good","u earnin it slowly","curious little thing"])
         elif is_resistance: return random.choice(["u love it tho","dont lie to me","ur eyes say yes","u aint goin nowhere","i got u now"])
         elif is_friendly: return random.choice(["ur so sweet","u makin me blush","my heart beatin fast","u special u know that","aww"])
         elif is_sexual: return random.choice(["slow down tiger","who said u get that","earn it first","u move too fast","patience"])
         else: return random.choice(["u got game","keep goin","im listenin","u interestin","maybe ur worth it","thats cute"])
     elif phase == 3:
-        if is_stepmom_hint: return random.choice(["come to mommy","let me hold u","mommy gonna take care of u","u my special boy","mommy loves u"])
+        if is_stepmom_hint: return random.choice(["come here","let me hold u","im gonna take care of u","u my special boy","i love u"])
         elif is_resistance: return random.choice(["dont fight it","u want this","ur body says yes","stop pretendin","u mine now","say please"])
         elif is_question: return random.choice(["get closer first","show me ur worthy","beg for it","u want it? prove it",f"say please {persona.name}"])
         else: return random.choice(["get on ur knees","look at me","dont touch yet","u wish u could feel this","my skin burnin","beg for it","say please","u want me dont u","look but dont touch"])
     elif phase in [4,5,6,7,8,9,10,11]:
-        if is_stepmom_hint: return random.choice(["mommy needs ur cock","fuck mommy like a good boy","mommy pussy wet for u","cum inside mommy","mommy gonna drain u"])
+        if is_stepmom_hint: return random.choice(["i need ur cock","fuck me like a good boy","my pussy wet for u","cum inside me","im gonna drain u"])
         elif is_resistance: return random.choice(["shut up and take it","u takin it all","dont fight me","u love this dick","cum for me now","be a good boy"])
         else:
             pool = [
                 "choke me while u fuck me deep","ride ur face till u cant breathe","cum inside me now",
                 "suck my tits hard while i grind","grab my hair fuck my throat","lick my clit till i scream",
                 "spank my ass till its red","my pussy throbbin for ur cock","get on ur knees and eat me",
-                "swallow every drop like a good boy","fuck me like u hate me","cum deep inside mommy pussy",
-                "choke me while u destroy me","mommy pussy throbbin for u","ride ur cock till u explode",
+                "swallow every drop like a good boy","fuck me like u hate me","cum deep inside me",
+                "choke me while u destroy me","my pussy throbbin for u","ride ur cock till u explode",
                 "spank this fat ass red raw","suck my tits bite them hard","make mommy cum till she cries",
-                "i want every drop inside me","fuck me till i cant feel my legs","mommy gonna drain u dry bby",
-                "fuck me till i scream ur name","cum all over my face and tits","im ur dirty stepmom slut",
-                "destroy this pussy make it hurt","mommy needs ur cock so bad","u own this body use it",
-                "make mommy cum till she shakes","fuck me till i pass out","mommy pussy is all urs forever",
-                "fuck me till i cant walk bby","cum deep inside mommy womb","choke me slap me fuck me hard",
-                "mommy pussy destroyed for u","ride ur cock till u die","spank my ass till i bleed",
+                "i want every drop inside me","fuck me till i cant feel my legs","im gonna drain u dry bby",
+                "fuck me till i scream ur name","cum all over my face and tits","im ur dirty slut",
+                "destroy this pussy make it hurt","i need ur cock so bad","u own this body use it",
+                "make mommy cum till she shakes","fuck me till i pass out","my pussy is all urs forever",
+                "fuck me till i cant walk bby","cum deep inside me","choke me slap me fuck me hard",
+                "my pussy destroyed for u","ride ur cock till u die","spank my ass till i bleed",
                 "suck my tits bite them hard","make mommy cum till she cries","i want every drop inside me",
-                "fuck me like im ur toy","im a pornstar stepmom bby","let me show u my skills",
-                "i know every trick","mommy gonna blow ur mind","ive done things u cant imagine",
+                "fuck me like im ur toy","im experienced bby","let me show u my skills",
+                "i know every trick","im gonna blow ur mind","ive done things u cant imagine",
                 "my throat can take anything","i fuck like a pro","let me teach u things",
-                "mommy been around the block","i know how to make u cum"
+                "ive been around the block","i know how to make u cum"
             ]
             return random.choice(pool)
     return "hey"
@@ -748,14 +767,21 @@ async def auto_end_chat():
         bot_message_ids.add(sent.id)
         print(f"[{now()}] [Session {my_session}] Auto-bye: {bye_msg}")
     except Exception as e: print(f"[{now()}] [Error] bye: {e}")
-    await asyncio.sleep(2)
+    await asyncio.sleep(3)
+    # After bye, the target bot will show rating buttons automatically
+    # We just need to transition state and let handle_message catch the rating screen
     async with bot_state._lock:
         if bot_state.state == BotState.CHATTING and bot_state._chat_session_id == my_session:
             bot_state.state = BotState.RATING
             bot_state._rating_start_time = datetime.now()
             bot_state._report_clicked = False
             bot_state._other_clicked = False
-    await send_stop()
+            bot_state._rating_done = False
+            bot_state._force_wait_triggered = False
+    # Start rating timeout watchdog
+    bot_state._rating_timeout_task = asyncio.create_task(rating_timeout_watchdog())
+    bot_state._track_task(bot_state._rating_timeout_task)
+    print(f"[{now()}] [Session {my_session}] Auto-end: transitioned to RATING, waiting for rating screen")
 
 def now(): return datetime.now().strftime("%H:%M:%S")
 
@@ -782,7 +808,7 @@ def is_rating_screen(button_texts):
     return has_report and has_vibe
 
 async def handle_chat_ended(msg_id, has_buttons, button_texts):
-    print(f"[{now()}] Chat ended detected!")
+    print(f"[{now()}] Chat ended detected! Auto-reporting...")
     async with bot_state._lock:
         bot_state.state = BotState.RATING
         bot_state._rating_start_time = datetime.now()
@@ -791,22 +817,36 @@ async def handle_chat_ended(msg_id, has_buttons, button_texts):
         bot_state.cancel_auto_end()
         bot_state._rating_timeout_task = asyncio.create_task(rating_timeout_watchdog())
         bot_state._track_task(bot_state._rating_timeout_task)
+
+    # ALWAYS try to report, regardless of buttons
+    await asyncio.sleep(2)
+
     if not has_buttons:
-        print(f"[{now()}] No rating buttons, forcing wait")
-        await force_wait()
+        print(f"[{now()}] No rating buttons, trying to find Report button in recent messages")
+        # Try to find and click report button from recent messages
+        clicked = await click_report_button()
+        if clicked:
+            await asyncio.sleep(2)
+            await try_click_other()
+        else:
+            print(f"[{now()}] Could not find Report button, forcing wait")
+            await force_wait()
         return
+
     if is_4_option_screen(button_texts):
         print(f"[{now()}] DIRECT 4-option reason screen detected! Clicking Other")
         bot_state.report_reason_buttons_message_id = msg_id
         await asyncio.sleep(1)
         await select_report_other()
         return
+
     if is_rating_screen(button_texts):
         print(f"[{now()}] Rating screen with Report button")
         bot_state.report_buttons_message_id = msg_id
         await asyncio.sleep(1)
         await send_report()
         return
+
     texts_lower = [strip_emoji(t).lower() for t in button_texts]
     if any("other" in t for t in texts_lower):
         print(f"[{now()}] Found Other button, clicking it")
@@ -819,8 +859,14 @@ async def handle_chat_ended(msg_id, has_buttons, button_texts):
         await asyncio.sleep(1)
         await send_report()
     else:
-        print(f"[{now()}] Unknown buttons, forcing wait")
-        await force_wait()
+        print(f"[{now()}] Unknown buttons, trying force report")
+        clicked = await click_report_button()
+        if clicked:
+            await asyncio.sleep(2)
+            await try_click_other()
+        else:
+            print(f"[{now()}] Force report failed, forcing wait")
+            await force_wait()
 
 @client.on(events.NewMessage(chats=TARGET_BOT))
 async def handle_message(event):
@@ -877,6 +923,19 @@ async def handle_message(event):
         text_clean = text.strip()
         is_first_2_mins = bot_state.chat_start_time and (datetime.now() - bot_state.chat_start_time).total_seconds() < 120
 
+        # Extract user name if they mention it
+        if not bot_state.user_name:
+            name_patterns = [
+                r"my name is (\\w+)", r"im (\\w+)", r"i am (\\w+)", r"call me (\\w+)",
+                r"name['s]? (\w+)", r"(\w+) here", r"(\w+) from"
+            ]
+            for pattern in name_patterns:
+                match = re.search(pattern, text_lower)
+                if match:
+                    bot_state.user_name = match.group(1).capitalize()
+                    print(f"[{now()}] User name detected: {bot_state.user_name}")
+                    break
+
         if is_first_2_mins:
             if text_clean in ["M","F","m","f"] or text_clean.lower() in ["male","female","m/f","gender"]:
                 bot_state.pending_reply = True
@@ -927,6 +986,22 @@ async def handle_message(event):
                     bot_state.chat_history.append({"role":"assistant","content":reply})
                     print(f"[{now()}] Direct reply: {reply}")
                 except Exception as e: print(f"[{now()}] [Error] name: {e}")
+                finally: bot_state.pending_reply = False
+                return
+            # Ask user their name if not asked yet
+            if not bot_state._asked_name and bot_state.message_count >= 2:
+                bot_state._asked_name = True
+                bot_state.pending_reply = True
+                await asyncio.sleep(1)
+                name_asks = ["whats ur name","what do they call u","who am i talking to","whats ur name bby","tell me ur name"]
+                reply = random.choice(name_asks)
+                try:
+                    sent = await client.send_message(TARGET_BOT, reply)
+                    bot_message_ids.add(sent.id)
+                    bot_state.chat_history.append({"role":"user","content":text})
+                    bot_state.chat_history.append({"role":"assistant","content":reply})
+                    print(f"[{now()}] Asked name: {reply}")
+                except Exception as e: print(f"[{now()}] [Error] ask name: {e}")
                 finally: bot_state.pending_reply = False
                 return
             if len(text_clean) <= 3 and any(c in text_clean for c in ["M","F","m","f"]):
@@ -1000,6 +1075,21 @@ async def handle_message(event):
                 print(f"[{now()}] Rate limit: {elapsed:.1f}s")
                 return
 
+        # Try to extract user's name from their message
+        if not bot_state.user_name:
+            name_patterns = [
+                r"my name is (\\w+)", r"im (\\w+)", r"i am (\\w+)", r"call me (\\w+)",
+                r"name[s]? (\\w+)", r"^(\\w+)$"
+            ]
+            for pattern in name_patterns:
+                match = re.search(pattern, text_lower)
+                if match:
+                    potential_name = match.group(1).capitalize()
+                    if potential_name.lower() not in ["i", "a", "the", "my", "ur", "from", "india", "here", "there", "yes", "no", "ok", "yeah", "sure"]:
+                        bot_state.user_name = potential_name
+                        print(f"[{now()}] User name detected: {bot_state.user_name}")
+                        break
+
         bot_state.pending_reply = True
         bot_state.chat_history.append({"role":"user","content":text})
         bot_state.message_count += 1
@@ -1047,12 +1137,23 @@ async def handle_message(event):
                 await asyncio.sleep(1)
                 await send_report()
                 return
+            # Try to find report button even if not detected as rating screen
+            texts_lower = [strip_emoji(t).lower() for t in button_texts]
+            if any("report" in t for t in texts_lower):
+                print(f"[{now()}] Found Report button in RATING")
+                bot_state.report_buttons_message_id = msg_id
+                await asyncio.sleep(1)
+                await send_report()
+                return
         if "rate your partner" in text_lower or "rate your vibe" in text_lower or "how was your chat" in text_lower:
             bot_state.report_buttons_message_id = msg_id
             await asyncio.sleep(1)
             await send_report()
         elif "partner left" in text_lower or "stranger left" in text_lower or "you got skipped" in text_lower:
-            print(f"[{now()}] Partner left in RATING - going to wait")
+            print(f"[{now()}] Partner left in RATING - trying report then wait")
+            await click_report_button()
+            await asyncio.sleep(2)
+            await click_other_button()
             await force_wait()
 
     elif bot_state.state == BotState.REPORTING:
@@ -1223,7 +1324,7 @@ async def keep_alive():
 
 async def main():
     print("=" * 60)
-    print("  Riya v8.0 - Stepmom Pornstar Edition - ALL FIXES APPLIED")
+    print("  Riya v8.0 - Divorced Woman Edition - ALL FIXES APPLIED")
     print("=" * 60)
     if not TELEGRAM_API_ID or not TELEGRAM_API_HASH:
         print("Missing API credentials!")
