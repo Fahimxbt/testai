@@ -288,7 +288,6 @@ class ChatBot:
         self._report_clicked = False
         self._other_clicked = False
         self._rating_timeout_task = None
-        self.user_name = None  # Store user's name
         self.user_name = None
         self._asked_name = False
 
@@ -465,7 +464,6 @@ def clean_response(text):
     for phrase in bad_phrases:
         if phrase.lower() in text.lower(): return get_smart_fallback("", bot_state.phase)
     if is_forbidden(text): return get_smart_fallback("", bot_state.phase)
-    # Extra filter: catch male-dominant phrases AI might generate
     male_dominant = ["bend over", "spread your", "spread those", "take my cock", "take my dick", "suck my cock", "suck my dick", "im gonna fuck", "im going to fuck", "let me fuck", "wanna fuck you", "want to fuck you", "fuck your", "fuck you", "your ass", "your cheeks", "open your", "get on your knees so i can", "on your knees for me", "for me baby", "for me bby", "for me boy", "im gonna cum", "im going to cum", "gonna cum for", "going to cum for"]
     text_lower = text.lower()
     for phrase in male_dominant:
@@ -768,8 +766,6 @@ async def auto_end_chat():
         print(f"[{now()}] [Session {my_session}] Auto-bye: {bye_msg}")
     except Exception as e: print(f"[{now()}] [Error] bye: {e}")
     await asyncio.sleep(3)
-    # After bye, the target bot will show rating buttons automatically
-    # We just need to transition state and let handle_message catch the rating screen
     async with bot_state._lock:
         if bot_state.state == BotState.CHATTING and bot_state._chat_session_id == my_session:
             bot_state.state = BotState.RATING
@@ -778,7 +774,6 @@ async def auto_end_chat():
             bot_state._other_clicked = False
             bot_state._rating_done = False
             bot_state._force_wait_triggered = False
-    # Start rating timeout watchdog
     bot_state._rating_timeout_task = asyncio.create_task(rating_timeout_watchdog())
     bot_state._track_task(bot_state._rating_timeout_task)
     print(f"[{now()}] [Session {my_session}] Auto-end: transitioned to RATING, waiting for rating screen")
@@ -818,12 +813,10 @@ async def handle_chat_ended(msg_id, has_buttons, button_texts):
         bot_state._rating_timeout_task = asyncio.create_task(rating_timeout_watchdog())
         bot_state._track_task(bot_state._rating_timeout_task)
 
-    # ALWAYS try to report, regardless of buttons
     await asyncio.sleep(2)
 
     if not has_buttons:
         print(f"[{now()}] No rating buttons, trying to find Report button in recent messages")
-        # Try to find and click report button from recent messages
         clicked = await click_report_button()
         if clicked:
             await asyncio.sleep(2)
@@ -926,7 +919,7 @@ async def handle_message(event):
         # Extract user name if they mention it
         if not bot_state.user_name:
             name_patterns = [
-                r"my name is (\\w+)", r"im (\\w+)", r"i am (\\w+)", r"call me (\\w+)",
+                r"my name is (\w+)", r"im (\w+)", r"i am (\w+)", r"call me (\w+)",
                 r"name['s]? (\w+)", r"(\w+) here", r"(\w+) from"
             ]
             for pattern in name_patterns:
@@ -988,8 +981,8 @@ async def handle_message(event):
                 except Exception as e: print(f"[{now()}] [Error] name: {e}")
                 finally: bot_state.pending_reply = False
                 return
-            # Ask user their name if not asked yet
-            if not bot_state._asked_name and bot_state.message_count >= 2:
+            # Ask user their name if not asked yet and not known
+            if not bot_state._asked_name and not bot_state.user_name and bot_state.message_count >= 2:
                 bot_state._asked_name = True
                 bot_state.pending_reply = True
                 await asyncio.sleep(1)
@@ -1078,8 +1071,8 @@ async def handle_message(event):
         # Try to extract user's name from their message
         if not bot_state.user_name:
             name_patterns = [
-                r"my name is (\\w+)", r"im (\\w+)", r"i am (\\w+)", r"call me (\\w+)",
-                r"name[s]? (\\w+)", r"^(\\w+)$"
+                r"my name is (\w+)", r"im (\w+)", r"i am (\w+)", r"call me (\w+)",
+                r"name[s]? (\w+)", r"^(\w+)$"
             ]
             for pattern in name_patterns:
                 match = re.search(pattern, text_lower)
@@ -1137,7 +1130,6 @@ async def handle_message(event):
                 await asyncio.sleep(1)
                 await send_report()
                 return
-            # Try to find report button even if not detected as rating screen
             texts_lower = [strip_emoji(t).lower() for t in button_texts]
             if any("report" in t for t in texts_lower):
                 print(f"[{now()}] Found Report button in RATING")
@@ -1323,9 +1315,7 @@ async def keep_alive():
         print(f"[{now()}] [KEEPALIVE] State: {bot_state.state}, Phase: {bot_state.phase}, Session: {bot_state._chat_session_id}, Tasks: {len(bot_state._active_tasks)}")
 
 async def main():
-    print("=" * 60)
-    print("  Riya v8.0 - Divorced Woman Edition - ALL FIXES APPLIED")
-    print("=" * 60)
+    print("Riya v9.0 starting...")
     if not TELEGRAM_API_ID or not TELEGRAM_API_HASH:
         print("Missing API credentials!")
         return
