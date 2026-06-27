@@ -363,6 +363,16 @@ class ChatBot:
         self.cancel_auto_end()
         self.cancel_wait_task()
 
+    def can_perform_action(self, cooldown=3):
+        if self._last_action_time is None:
+            self._last_action_time = datetime.now()
+            return True
+        elapsed = (datetime.now() - self._last_action_time).total_seconds()
+        if elapsed >= cooldown:
+            self._last_action_time = datetime.now()
+            return True
+        return False
+
 bot_state = ChatBot()
 
 async def get_ai_response(message_text):
