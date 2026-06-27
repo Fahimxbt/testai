@@ -132,7 +132,8 @@ If he asks sexual stuff, playfully deflect or say "slow down" but stay warm.
 NEVER use pet names like bby in Phase 1. Use normal girl talk.
 NEVER reveal you are AI or a pornstar. If asked who you are, say "im {name}, {age}, from {loc}".
 If asked M/F, reply "F" directly. If asked where from, reply "india, {loc}" directly.
-If asked age, reply "{age}" directly. If asked name, reply "{name}" directly."""
+If asked age, reply "{age}" directly. If asked name, reply "{name}" directly.
+If asked for Telegram ID, Instagram, Snapchat, WhatsApp, or any contact info, NEVER say "I don't give it" or refuse directly. Instead playfully deflect: "hmm maybe later", "u gotta earn that", "not yet bby", "keep me interested first", "why u wanna know", "im shy about that", "lets vibe here first", "maybe if ur good", "u move fast dont u", "patience baby boy". Keep it flirty and mysterious for the full 15 minutes. NEVER give real contact info."""
     elif phase == 2:
         base += f"""{core}
 You are getting comfortable with him. More flirty, playful teasing.
@@ -225,6 +226,7 @@ CRITICAL RULES:
 - If theyre friendly, be warm and nurturing back
 - If theyre sexual too fast in Phase 1, playfully deflect "slow down" but stay warm
 - If they ask personal questions, be direct and answer in Phase 1
+- If they ask for contact info (Telegram, Insta, Snap, WhatsApp), NEVER refuse directly. Playfully deflect and tease. Keep them hooked for 15 mins.
 - If they hint at stepmom/mom/aunty, play along subtly or deflect warmly
 - Be CREATIVE with sentence structure - questions, commands, statements, teases
 - ALWAYS sound human, warm, caring, like a real woman texting
@@ -232,6 +234,7 @@ CRITICAL RULES:
 - NEVER reveal youre a pornstar unless they figure it out
 - NEVER ask for pics, phone numbers, voice notes, or any media
 - NEVER say you have a cock or dick - you are FEMALE
+- NEVER say "bend over", "spread your", "take my cock", "suck my dick", "im gonna fuck you", "fuck your" - you are the one GETTING fucked
 - NEVER call the user "daddy" - call him "baby boy", "bby", "sweetie", "beta"
 {examples}
 CHAT HISTORY (last 10 messages):
@@ -375,7 +378,7 @@ async def get_ai_response(message_text):
         except Exception as e: print(f"[Mistral Error] {e}")
     return get_smart_fallback(message_text, bot_state.phase)
 
-FORBIDDEN_WORDS = ["daddy", "my cock", "my dick", "send me", "your number", "phone number", "send pic", "send photo", "send nude", "voice note", "call me"]
+FORBIDDEN_WORDS = ["daddy", "my cock", "my dick", "send me", "your number", "phone number", "send pic", "send photo", "send nude", "voice note", "call me", "bend over", "spread your", "spread those", "take my cock", "take my dick", "suck my cock", "suck my dick", "im gonna fuck", "im going to fuck", "let me fuck", "wanna fuck you", "want to fuck you", "fuck your", "fuck you", "your ass", "your cheeks", "open your", "get on your knees so i can", "on your knees for me", "for me baby", "for me bby", "for me boy", "im gonna cum", "im going to cum", "gonna cum for", "going to cum for"]
 
 def is_forbidden(text):
     t = text.lower()
@@ -443,6 +446,13 @@ def clean_response(text):
     for phrase in bad_phrases:
         if phrase.lower() in text.lower(): return get_smart_fallback("", bot_state.phase)
     if is_forbidden(text): return get_smart_fallback("", bot_state.phase)
+    # Extra filter: catch male-dominant phrases AI might generate
+    male_dominant = ["bend over", "spread your", "spread those", "take my cock", "take my dick", "suck my cock", "suck my dick", "im gonna fuck", "im going to fuck", "let me fuck", "wanna fuck you", "want to fuck you", "fuck your", "fuck you", "your ass", "your cheeks", "open your", "get on your knees so i can", "on your knees for me", "for me baby", "for me bby", "for me boy", "im gonna cum", "im going to cum", "gonna cum for", "going to cum for"]
+    text_lower = text.lower()
+    for phrase in male_dominant:
+        if phrase in text_lower:
+            print(f"[{now()}] [FILTER] Male-dominant phrase detected: '{phrase}'")
+            return get_smart_fallback("", bot_state.phase)
     if len(text) > 3:
         recent_assistant = [h["content"] for h in bot_state.chat_history[-4:] if h["role"] == "assistant"]
         if recent_assistant:
