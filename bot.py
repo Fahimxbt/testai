@@ -29,8 +29,8 @@ if MISTRAL_API_KEY:
 if GROQ_API_KEY:
     groq_client = httpx.AsyncClient(base_url="https://api.groq.com/openai/v1", headers={"Authorization": f"Bearer {GROQ_API_KEY}"}, timeout=30.0)
 
-# PERSONA ENGINE
-NAMES_POOL = ["Riya","Ananya","Priya","Nisha","Kavya","Ishita","Sanya","Tanya","Meera","Zara","Diya","Rhea","Sara","Myra","Kiara","Aisha","Neha","Pooja","Sonia","Divya","Ira","Tara","Mira","Kira","Natasha","Simran","Priyanka","Deepika","Katrina","Anushka"]
+# PERSONA ENGINE - All personas are warm dominant divorced women like Neha
+NAMES_POOL = ["Neha","Riya","Ananya","Priya","Nisha","Kavya","Ishita","Sanya","Tanya","Meera","Zara","Diya","Rhea","Sara","Myra","Kiara","Aisha","Pooja","Sonia","Divya","Ira","Tara","Mira","Natasha","Simran","Priyanka"]
 AGE_POOL = [30,31,32,33,34,35,36,37,38,39,40]
 LOCATION_POOL = ["delhi","mumbai","bangalore","pune","hyderabad","chennai","kolkata","goa","jaipur"]
 
@@ -290,6 +290,8 @@ class ChatBot:
         self._rating_timeout_task = None
         self.user_name = None
         self._asked_name = False
+        self._stop_clicked = False
+        self._matched_message_id = None
 
     def reset_chat(self):
         self.chat_history = []
@@ -308,8 +310,8 @@ class ChatBot:
         self._force_wait_triggered = False
         self._report_clicked = False
         self._other_clicked = False
-        self.user_name = None
-        self._asked_name = False
+        self._stop_clicked = False
+        self._matched_message_id = None
         if self._rating_timeout_task and not self._rating_timeout_task.done():
             self._rating_timeout_task.cancel()
         self._rating_timeout_task = None
@@ -499,12 +501,10 @@ async def find_and_click_button(button_text, message_id=None, search_recent=Fals
                     for row in message.buttons:
                         for btn in row:
                             clean_btn_text = strip_emoji(btn.text).lower().strip()
-                            # Check if target is in cleaned text, or cleaned text contains target
                             if target_text in clean_btn_text or clean_btn_text in target_text:
                                 await btn.click()
                                 print(f"[{now()}] -> Clicked: '{btn.text}' (msg_id={message_id})")
                                 return True
-                            # Also check original text for emoji-prefixed buttons
                             orig_lower = btn.text.lower().strip()
                             if target_text in orig_lower:
                                 await btn.click()
@@ -530,6 +530,14 @@ async def find_and_click_button(button_text, message_id=None, search_recent=Fals
     except Exception as e:
         print(f"[{now()}] [Button Error] {e}")
         return False
+
+async def click_stop_button(message_id=None):
+    """Click the Stop inline button on the matched message"""
+    for search_recent in [False, True]:
+        for text in ["stop","⏹ stop","🛑 stop","stop — end this chat","end this chat"]:
+            if await find_and_click_button(text, message_id=message_id, search_recent=search_recent):
+                return True
+    return False
 
 async def click_report_button(message_id=None):
     for search_recent in [False, True]:
@@ -590,31 +598,51 @@ async def send_next():
         bot_state.cancel_auto_end()
     except Exception as e: print(f"[{now()}] [Error] send_next: {e}")
 
-async def send_stop():
+async def send_stop_and_report():
+    """Click the Stop inline button, then handle rating/report flow"""
     if not bot_state.can_perform_action(cooldown=3): return
-    try:
-        sent = await client.send_message(TARGET_BOT, "⏹️ Stop")
-        bot_message_ids.add(sent.id)
-        print(f"[{now()}] -> Stop")
+
+    # First, try to click the Stop inline button on the matched message
+    clicked_stop = False
+    if bot_state._matched_message_id:
+        print(f"[{now()}] Trying to click Stop on msg_id={bot_state._matched_message_id}")
+        clicked_stop = await click_stop_button(bot_state._matched_message_id)
+    if not clicked_stop:
+        print(f"[{now()}] Searching for Stop button in recent messages...")
+        clicked_stop = await click_stop_button()
+
+    if clicked_stop:
+        print(f"[{now()}] -> Stop button clicked")
         async with bot_state._lock:
+            bot_state._stop_clicked = True
             bot_state.state = BotState.RATING
             bot_state._rating_start_time = datetime.now()
             bot_state._report_clicked = False
             bot_state._other_clicked = False
+            bot_state._rating_done = False
+        bot_state.cancel_auto_end()
+        # Start rating timeout watchdog
+        if bot_state._rating_timeout_task and not bot_state._rating_timeout_task.done():
+            bot_state._rating_timeout_task.cancel()
         bot_state._rating_timeout_task = asyncio.create_task(rating_timeout_watchdog())
         bot_state._track_task(bot_state._rating_timeout_task)
-    except Exception as e: print(f"[{now()}] [Error] send_stop: {e}")
-
-async def rating_timeout_watchdog():
-    await asyncio.sleep(60)
-    async with bot_state._lock:
-        if bot_state.state in [BotState.RATING, BotState.REPORTING] and not bot_state._rating_done:
-            print(f"[{now()}] RATING WATCHDOG: Rating stuck for 60s, forcing wait")
-            bot_state._rating_timeout_task = None
-        else:
-            print(f"[{now()}] RATING WATCHDOG: Rating completed or state changed, no action needed")
-            return
-    await force_wait()
+    else:
+        print(f"[{now()}] [WARN] Could not find Stop button, sending text stop instead")
+        try:
+            sent = await client.send_message(TARGET_BOT, "⏹️ Stop")
+            bot_message_ids.add(sent.id)
+            async with bot_state._lock:
+                bot_state.state = BotState.RATING
+                bot_state._rating_start_time = datetime.now()
+                bot_state._report_clicked = False
+                bot_state._other_clicked = False
+                bot_state._rating_done = False
+            bot_state.cancel_auto_end()
+            if bot_state._rating_timeout_task and not bot_state._rating_timeout_task.done():
+                bot_state._rating_timeout_task.cancel()
+            bot_state._rating_timeout_task = asyncio.create_task(rating_timeout_watchdog())
+            bot_state._track_task(bot_state._rating_timeout_task)
+        except Exception as e: print(f"[{now()}] [Error] send_stop: {e}")
 
 async def send_report():
     async with bot_state._lock:
@@ -752,6 +780,7 @@ async def wait_then_find():
         bot_state._force_wait_triggered = False
         bot_state._report_clicked = False
         bot_state._other_clicked = False
+        bot_state._stop_clicked = False
     await asyncio.sleep(2)
     async with bot_state._lock:
         if bot_state._chat_session_id != my_session:
@@ -778,6 +807,8 @@ async def auto_end_chat():
         if bot_state._chat_session_id != my_session:
             print(f"[{now()}] [Session {my_session}] STALE auto-end task. Aborting.")
             return
+
+    # Send bye message
     goodbyes = ["im out","cya","ttyl","bye","gotta go","see ya"]
     bye_msg = random.choice(goodbyes)
     try:
@@ -785,25 +816,17 @@ async def auto_end_chat():
         bot_message_ids.add(sent.id)
         print(f"[{now()}] [Session {my_session}] Auto-bye: {bye_msg}")
     except Exception as e: print(f"[{now()}] [Error] bye: {e}")
+
     await asyncio.sleep(3)
-    async with bot_state._lock:
-        if bot_state.state == BotState.CHATTING and bot_state._chat_session_id == my_session:
-            bot_state.state = BotState.RATING
-            bot_state._rating_start_time = datetime.now()
-            bot_state._report_clicked = False
-            bot_state._other_clicked = False
-            bot_state._rating_done = False
-            bot_state._force_wait_triggered = False
-            if bot_state._rating_timeout_task and not bot_state._rating_timeout_task.done():
-                bot_state._rating_timeout_task.cancel()
-            bot_state._rating_timeout_task = asyncio.create_task(rating_timeout_watchdog())
-            bot_state._track_task(bot_state._rating_timeout_task)
-    print(f"[{now()}] [Session {my_session}] Auto-end: transitioned to RATING, waiting for rating screen")
+
+    # Now click the Stop button to end the chat properly
+    print(f"[{now()}] [Session {my_session}] Clicking Stop button...")
+    await send_stop_and_report()
 
 def now(): return datetime.now().strftime("%H:%M:%S")
 
 bot_message_ids = set()
-END_KEYWORDS = ["you got skipped","got skipped","skipped","stranger left","partner left","chat ended","they left","they left you","user left","rate your partner","rate your vibe","how was your chat","you stopped the chat","stopped the chat","just got skipped"]
+END_KEYWORDS = ["you got skipped","got skipped","skipped","stranger left","partner left","chat ended","they left","they left you","user left","rate your partner","rate your vibe","how was your chat","you stopped the chat","stopped the chat","just got skipped","find a new vibe"]
 SYSTEM_MSGS = ["you've been matched","next — skip","stop — end","find a new vibe","you stopped","hunting for your vibe","don't be shy","say hi first","stranger!","matched with","tap something","ayo","report sent","we'll review","your partner rated","partner rated","bro you're already vibing","hit next to switch","stop to dip","hunting for your vibe rn"]
 
 def is_chat_ended(text):
@@ -825,14 +848,23 @@ def is_rating_screen(button_texts):
     has_no_vibe = any("no vibe" in t for t in texts_lower)
     return has_report and (has_vibe or has_no_vibe)
 
-async def handle_chat_ended(msg_id, has_buttons, button_texts):
-    print(f"[{now()}] Chat ended detected! Auto-reporting...")
+def is_matched_message(text, has_buttons):
+    """Check if this is the initial matched message with Next/Stop buttons"""
+    text_lower = text.lower()
+    has_matched = "matched with a stranger" in text_lower or "matched with" in text_lower
+    return has_matched and has_buttons
+
+async def handle_chat_ended(msg_id, has_buttons, button_texts, text=""):
+    print(f"[{now()}] Chat ended detected! Handling end flow...")
+
     async with bot_state._lock:
-        bot_state.state = BotState.RATING
-        bot_state._rating_start_time = datetime.now()
-        bot_state._report_clicked = False
-        bot_state._other_clicked = False
         bot_state.cancel_auto_end()
+        if bot_state.state == BotState.CHATTING:
+            bot_state.state = BotState.RATING
+            bot_state._rating_start_time = datetime.now()
+            bot_state._report_clicked = False
+            bot_state._other_clicked = False
+            bot_state._rating_done = False
         if bot_state._rating_timeout_task and not bot_state._rating_timeout_task.done():
             bot_state._rating_timeout_task.cancel()
         bot_state._rating_timeout_task = asyncio.create_task(rating_timeout_watchdog())
@@ -840,64 +872,63 @@ async def handle_chat_ended(msg_id, has_buttons, button_texts):
 
     await asyncio.sleep(2)
 
-    if not has_buttons:
-        print(f"[{now()}] No rating buttons on end msg, waiting for rating screen...")
-        # Wait up to 10 seconds for the rating screen to arrive
+    # If we have buttons on this message, handle them
+    if has_buttons:
+        if is_4_option_screen(button_texts):
+            print(f"[{now()}] DIRECT 4-option reason screen detected! Clicking Other")
+            bot_state.report_reason_buttons_message_id = msg_id
+            await asyncio.sleep(1)
+            await select_report_other()
+            return
+
+        if is_rating_screen(button_texts):
+            print(f"[{now()}] Rating screen with Report button on end msg")
+            bot_state.report_buttons_message_id = msg_id
+            await asyncio.sleep(1)
+            await send_report()
+            return
+
+        texts_lower = [strip_emoji(t).lower() for t in button_texts]
+        if any("other" in t for t in texts_lower):
+            print(f"[{now()}] Found Other button, clicking it")
+            bot_state.report_reason_buttons_message_id = msg_id
+            await asyncio.sleep(1)
+            await select_report_other()
+            return
+        elif any("report" in t for t in texts_lower):
+            print(f"[{now()}] Found Report button, clicking it")
+            bot_state.report_buttons_message_id = msg_id
+            await asyncio.sleep(1)
+            await send_report()
+            return
+
+    # No buttons on this message - need to click Stop first, then wait for rating screen
+    text_lower = text.lower()
+    if "you got skipped" in text_lower or "got skipped" in text_lower or "stranger left" in text_lower or "partner left" in text_lower:
+        print(f"[{now()}] Partner left/skipped - they already ended it, looking for rating buttons...")
+        # Wait a bit for rating screen to appear
         for attempt in range(5):
             await asyncio.sleep(2)
-            # Search recent messages for rating buttons
             async for message in client.iter_messages(TARGET_BOT, limit=5):
                 if message.buttons:
                     btns = [btn.text for row in message.buttons for btn in row]
                     texts_lower = [strip_emoji(t).lower() for t in btns]
                     if any("report" in t for t in texts_lower):
-                        print(f"[{now()}] Found rating screen in recent messages (attempt {attempt+1})")
+                        print(f"[{now()}] Found rating screen (attempt {attempt+1})")
                         bot_state.report_buttons_message_id = message.id
                         await send_report()
                         return
                     if is_4_option_screen(btns):
-                        print(f"[{now()}] Found 4-option screen in recent (attempt {attempt+1})")
+                        print(f"[{now()}] Found 4-option screen (attempt {attempt+1})")
                         bot_state.report_reason_buttons_message_id = message.id
                         await select_report_other()
                         return
         print(f"[{now()}] Rating screen not found after waiting, forcing wait")
         await force_wait()
-        return
-
-    if is_4_option_screen(button_texts):
-        print(f"[{now()}] DIRECT 4-option reason screen detected! Clicking Other")
-        bot_state.report_reason_buttons_message_id = msg_id
-        await asyncio.sleep(1)
-        await select_report_other()
-        return
-
-    if is_rating_screen(button_texts):
-        print(f"[{now()}] Rating screen with Report button")
-        bot_state.report_buttons_message_id = msg_id
-        await asyncio.sleep(1)
-        await send_report()
-        return
-
-    texts_lower = [strip_emoji(t).lower() for t in button_texts]
-    if any("other" in t for t in texts_lower):
-        print(f"[{now()}] Found Other button, clicking it")
-        bot_state.report_reason_buttons_message_id = msg_id
-        await asyncio.sleep(1)
-        await select_report_other()
-    elif any("report" in t for t in texts_lower):
-        print(f"[{now()}] Found Report button, clicking it")
-        bot_state.report_buttons_message_id = msg_id
-        await asyncio.sleep(1)
-        await send_report()
     else:
-        print(f"[{now()}] Unknown buttons, trying force report")
-        clicked = await click_report_button()
-        if clicked:
-            await asyncio.sleep(2)
-            await try_click_other()
-        else:
-            print(f"[{now()}] Force report failed, forcing wait")
-            await force_wait()
+        # We need to click Stop button first
+        print(f"[{now()}] Need to click Stop button to trigger rating...")
+        await send_stop_and_report()
 
 @client.on(events.NewMessage(chats=TARGET_BOT))
 async def handle_message(event):
@@ -914,6 +945,11 @@ async def handle_message(event):
         print(f"[{now()}] [{bot_state.state.upper()}] {text[:100]}")
     if has_buttons: print(f"[{now()}] [BUTTONS] {button_texts}")
     text_lower = text.lower()
+
+    # Store matched message ID for Stop button clicking later
+    if is_matched_message(text, has_buttons):
+        bot_state._matched_message_id = msg_id
+        print(f"[{now()}] Stored matched message id={msg_id}")
 
     if bot_state.state == BotState.FINDING:
         if "matched with a stranger" in text_lower or "matched with" in text_lower:
@@ -942,11 +978,11 @@ async def handle_message(event):
 
     elif bot_state.state == BotState.CHATTING:
         if is_chat_ended(text):
-            await handle_chat_ended(msg_id, has_buttons, button_texts)
+            await handle_chat_ended(msg_id, has_buttons, button_texts, text)
             return
         if has_buttons and is_rating_screen(button_texts):
             print(f"[{now()}] Rating buttons detected during chat!")
-            await handle_chat_ended(msg_id, has_buttons, button_texts)
+            await handle_chat_ended(msg_id, has_buttons, button_texts, text)
             return
         if bot_state.pending_reply:
             print(f"[{now()}] Already replying, skip")
@@ -958,7 +994,7 @@ async def handle_message(event):
         if not bot_state.user_name:
             name_patterns = [
                 r"my name is (\w+)", r"im (\w+)", r"i am (\w+)", r"call me (\w+)",
-                r"name['s]? (\w+)", r"(\w+) here", r"(\w+) from"
+                r"name[\'s]? (\w+)", r"(\w+) here", r"(\w+) from"
             ]
             for pattern in name_patterns:
                 match = re.search(pattern, text_lower)
@@ -967,19 +1003,24 @@ async def handle_message(event):
                     print(f"[{now()}] User name detected: {bot_state.user_name}")
                     break
 
+        # ===== M/F HANDLING - ALWAYS REPLY "F" DIRECTLY =====
+        mf_patterns = ["m or f", "m/f", "male or female", "gender", "m?", "f?"]
+        is_mf_question = any(p in text_lower for p in mf_patterns) or text_clean in ["M","F","m","f","M?","F?","m?","f?"]
+
+        if is_mf_question:
+            bot_state.pending_reply = True
+            await asyncio.sleep(1)
+            try:
+                sent = await client.send_message(TARGET_BOT, "F")
+                bot_message_ids.add(sent.id)
+                bot_state.chat_history.append({"role":"user","content":text_clean})
+                bot_state.chat_history.append({"role":"assistant","content":"F"})
+                print(f"[{now()}] Direct reply: F (M/F question)")
+            except Exception as e: print(f"[{now()}] [Error] M/F: {e}")
+            finally: bot_state.pending_reply = False
+            return
+
         if is_first_2_mins:
-            if text_clean in ["M","F","m","f"] or text_clean.lower() in ["male","female","m/f","gender"]:
-                bot_state.pending_reply = True
-                await asyncio.sleep(1)
-                try:
-                    sent = await client.send_message(TARGET_BOT, "F")
-                    bot_message_ids.add(sent.id)
-                    bot_state.chat_history.append({"role":"user","content":text_clean})
-                    bot_state.chat_history.append({"role":"assistant","content":"F"})
-                    print(f"[{now()}] Direct reply: F")
-                except Exception as e: print(f"[{now()}] [Error] gender: {e}")
-                finally: bot_state.pending_reply = False
-                return
             if any(w in text_lower for w in ["where u from","where are you from","where from","location","city","from where","where do you live"]):
                 bot_state.pending_reply = True
                 await asyncio.sleep(1)
@@ -1035,32 +1076,6 @@ async def handle_message(event):
                 except Exception as e: print(f"[{now()}] [Error] ask name: {e}")
                 finally: bot_state.pending_reply = False
                 return
-            if len(text_clean) <= 3 and any(c in text_clean for c in ["M","F","m","f"]):
-                bot_state.pending_reply = True
-                await asyncio.sleep(1)
-                try:
-                    sent = await client.send_message(TARGET_BOT, "F")
-                    bot_message_ids.add(sent.id)
-                    bot_state.chat_history.append({"role":"user","content":text_clean})
-                    bot_state.chat_history.append({"role":"assistant","content":"F"})
-                    print(f"[{now()}] Direct reply: F (short)")
-                except Exception as e: print(f"[{now()}] [Error] gender short: {e}")
-                finally: bot_state.pending_reply = False
-                return
-
-        if text_clean in ["M","F","m","f"]:
-            bot_state.pending_reply = True
-            reply = "F" if text_clean in ["M","m"] else random.choice(["F here too","same","girls rule lol"])
-            await asyncio.sleep(3)
-            try:
-                sent = await client.send_message(TARGET_BOT, reply)
-                bot_message_ids.add(sent.id)
-                bot_state.chat_history.append({"role":"user","content":text_clean})
-                bot_state.chat_history.append({"role":"assistant","content":reply})
-                print(f"[{now()}] Reply: {reply}")
-            except Exception as e: print(f"[{now()}] [Error] gender: {e}")
-            finally: bot_state.pending_reply = False
-            return
 
         if has_media or text == "[media]":
             bot_state.pending_reply = True
@@ -1184,7 +1199,6 @@ async def handle_message(event):
         if "rate your partner" in text_lower or "rate your vibe" in text_lower or "how was your chat" in text_lower or "they left you" in text_lower:
             bot_state.report_buttons_message_id = msg_id
             await asyncio.sleep(2)
-            # The rating buttons might be on this message or next - try to find them
             clicked = await click_report_button(msg_id)
             if not clicked:
                 clicked = await click_report_button()
@@ -1246,7 +1260,6 @@ async def handle_message(event):
     elif bot_state.state == BotState.WAITING:
         if "find a new vibe" in text_lower:
             print(f"[{now()}] Find a new vibe in WAITING - checking if we should auto-find")
-            # If wait task is not running, we might be stuck - start finding
             if not bot_state._wait_task or bot_state._wait_task.done():
                 print(f"[{now()}] Wait task not running, forcing find")
                 async with bot_state._lock:
@@ -1305,6 +1318,17 @@ async def auto_end_after_delay():
     print(f"[{now()}] [Session {my_session}] Auto-end timer fired!")
     await safe_auto_end_chat()
 
+async def rating_timeout_watchdog():
+    await asyncio.sleep(60)
+    async with bot_state._lock:
+        if bot_state.state in [BotState.RATING, BotState.REPORTING] and not bot_state._rating_done:
+            print(f"[{now()}] RATING WATCHDOG: Rating stuck for 60s, forcing wait")
+            bot_state._rating_timeout_task = None
+        else:
+            print(f"[{now()}] RATING WATCHDOG: Rating completed or state changed, no action needed")
+            return
+    await force_wait()
+
 @client.on(events.NewMessage(pattern=r"/start", from_users="me"))
 async def cmd_start(event):
     await event.reply("Starting...")
@@ -1333,15 +1357,20 @@ async def cmd_status(event):
 - Force Wait Triggered: {bot_state._force_wait_triggered}
 - Report Clicked: {bot_state._report_clicked}
 - Other Clicked: {bot_state._other_clicked}
+- Stop Clicked: {bot_state._stop_clicked}
+- Matched Msg ID: {bot_state._matched_message_id}
 - Rating Stuck: {rating_stuck}s"""
     await event.reply(status)
 
 @client.on(events.NewMessage(pattern=r"/stop", from_users="me"))
 async def cmd_stop(event):
-    async with bot_state._lock: bot_state.state = BotState.IDLE
+    async with bot_state._lock: 
+        if bot_state.state == BotState.CHATTING:
+            bot_state.state = BotState.RATING
+            bot_state._rating_start_time = datetime.now()
     bot_state.cancel_all_tasks()
-    await send_stop()
-    await event.reply("Stopped.")
+    await send_stop_and_report()
+    await event.reply("Stopped and reporting...")
 
 @client.on(events.NewMessage(pattern=r"/stats", from_users="me"))
 async def cmd_stats(event):
@@ -1361,6 +1390,7 @@ async def cmd_force_find(event):
         bot_state._force_wait_triggered = False
         bot_state._report_clicked = False
         bot_state._other_clicked = False
+        bot_state._stop_clicked = False
     bot_state.cancel_all_tasks()
     await safe_start_finding()
     await event.reply("Forced find.")
@@ -1375,6 +1405,7 @@ async def cmd_skip_wait(event):
         bot_state._force_wait_triggered = False
         bot_state._report_clicked = False
         bot_state._other_clicked = False
+        bot_state._stop_clicked = False
     await safe_start_finding()
     await event.reply("Skipped wait.")
 
@@ -1384,7 +1415,7 @@ async def keep_alive():
         print(f"[{now()}] [KEEPALIVE] State: {bot_state.state}, Phase: {bot_state.phase}, Session: {bot_state._chat_session_id}, Tasks: {len(bot_state._active_tasks)}")
 
 async def main():
-    print("Riya v9.0 starting...")
+    print("Riya v10.0 starting...")
     if not TELEGRAM_API_ID or not TELEGRAM_API_HASH:
         print("Missing API credentials!")
         return
