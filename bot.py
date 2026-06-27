@@ -1,27 +1,3 @@
-"""
-Riya - Stepmom AI Chat Bot (Telethon Version) v8.0
-FIXES:
-1. AI is FEMALE stepmom - NEVER says she has cock/dick, NEVER calls user "daddy"
-2. User calls AI "mommy" - AI calls user "baby boy" / "bby" / "sweetie" / "beta"
-3. NEVER asks for pics, phone numbers, voice notes, or any media from user
-4. First 2 mins: DIRECT answers only (M->F, age->number, where->location, name->name)
-5. NSFW escalates minute by minute from min 3 to min 15
-6. Report flow FIXED: clicks Report -> clicks Other -> waits 5 min -> restarts
-7. Rating timeout watchdog - forces wait if stuck for 30s
-"""
-
-"""
-Riya - Stepmom AI Chat Bot (Telethon Version) v8.0
-FIXES:
-1. AI is FEMALE stepmom - NEVER says she has cock/dick, NEVER calls user "daddy"
-2. User calls AI "mommy" - AI calls user "baby boy" / "bby" / "sweetie" / "beta"
-3. NEVER asks for pics, phone numbers, voice notes, or any media from user
-4. First 2 mins: DIRECT answers only (M->F, age->number, where->location, name->name)
-5. NSFW escalates minute by minute from min 3 to min 15
-6. Report flow FIXED: clicks Report -> clicks Other -> waits 5 min -> restarts
-7. Rating timeout watchdog - forces wait if stuck for 30s
-"""
-
 import os
 import sys
 import asyncio
