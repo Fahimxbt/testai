@@ -70,7 +70,7 @@ MOOD_POOL = [
 class PersonaEngine:
     def __init__(self):
         self.refresh()
-    
+
     def refresh(self):
         self.name = random.choice(NAMES_POOL)
         self.age = random.choice(AGE_POOL)
@@ -528,16 +528,16 @@ def build_user_prompt(phase, persona_obj, history, message, user_name, user_vibe
     examples = PHASE_EXAMPLES_SHORT.get(phase, PHASE_EXAMPLES_SHORT[1]).format(
         name=name, loc=loc, age=age
     )
-    
+
     memory_hint = ""
     if user_name:
         memory_hint += f"User's name is {user_name}. Use it naturally 1-2 times. "
-    
+
     rep_warning = ""
     if recent_phrases:
         rep_warning = f'\nAVOID these recently used phrases: {recent_phrases}. Be creative and different.'
-    
-    prompt = f'''You are "{name}", {age}, from {loc}. Divorced single woman in her 30s. Current phase: {PHASE_NAMES[phase]}. User vibe: {user_vibe}. {memory_hint}
+
+    prompt = f"""You are \"{name}\", {age}, from {loc}. Divorced single woman in her 30s. Current phase: {PHASE_NAMES[phase]}. User vibe: {user_vibe}. {memory_hint}
 CRITICAL RULES:
 - Reply in 2-10 words MAXIMUM. One short sentence.
 - Use casual lowercase, shortcuts (ur, u, rn, lol, idk, nah, btw, bby, hmm, wow, ok)
@@ -564,7 +564,7 @@ Examples for this phase: {examples}
 CHAT HISTORY (last 8 messages):
 {history}
 THEY JUST SAID: "{message}"
-YOUR RESPONSE (ONE short sentence, 2-10 words, NO trailing emoji, WARM and HUMAN and DOMINANT):'''
+YOUR RESPONSE (ONE short sentence, 2-10 words, NO trailing emoji, WARM and HUMAN and DOMINANT):"""
     return prompt
 
 # =============================================================================
@@ -573,7 +573,7 @@ YOUR RESPONSE (ONE short sentence, 2-10 words, NO trailing emoji, WARM and HUMAN
 def detect_user_vibe(message):
     msg_lower = message.lower()
     vibes = []
-    
+
     if any(w in msg_lower for w in ["friend","friendship","talk","chat","nice","sweet","cute","good","fine"]):
         vibes.append("friendly")
     if any(w in msg_lower for w in ["horny","sex","fuck","cock","dick","pussy","nude","pic","show","boobs","tits","ass","cum","lick","suck","ride","choke","spank","deep","wet","drip","moan","scream","throat","gag","breed","pound","destroy","ruin","drain"]):
@@ -588,7 +588,7 @@ def detect_user_vibe(message):
         vibes.append("older_woman_hint")
     if any(w in msg_lower for w in ["telegram","insta","instagram","snap","snapchat","whatsapp","number","phone","contact","dm","message","personal","connect","link","id","@",".com","t.me"]):
         vibes.append("contact_request")
-    
+
     if not vibes:
         return "neutral"
     if "sexual" in vibes and "friendly" in vibes:
@@ -608,7 +608,7 @@ def calculate_adaptive_phase(base_phase, user_vibe, chat_history, chat_start_tim
     """Adjust phase based on user behavior, not just time"""
     if not chat_start_time:
         return base_phase
-    
+
     sexual_count = 0
     total_user_msgs = 0
     for entry in chat_history:
@@ -617,7 +617,7 @@ def calculate_adaptive_phase(base_phase, user_vibe, chat_history, chat_start_tim
             vibe = detect_user_vibe(entry["content"])
             if vibe in ["sexual", "flirty"]:
                 sexual_count += 1
-    
+
     if total_user_msgs >= 3:
         sexual_ratio = sexual_count / total_user_msgs
         if sexual_ratio >= 0.7 and base_phase < 5:
@@ -626,12 +626,12 @@ def calculate_adaptive_phase(base_phase, user_vibe, chat_history, chat_start_tim
         elif sexual_ratio >= 0.5 and base_phase < 4:
             boost = min(2, 4 - base_phase)
             return min(11, base_phase + boost)
-    
+
     if user_vibe == "resistant":
         return min(base_phase, 2)
     if user_vibe == "friendly" and base_phase > 3:
         return max(3, base_phase - 1)
-    
+
     return base_phase
 
 # =============================================================================
@@ -642,13 +642,13 @@ class RepetitionTracker:
         self.history = []
         self.max_history = max_history
         self.phrase_counts = Counter()
-    
+
     def add(self, text):
         self.history.append(text.lower().strip())
         if len(self.history) > self.max_history:
             removed = self.history.pop(0)
         self._recount()
-    
+
     def _recount(self):
         self.phrase_counts = Counter()
         for h in self.history:
@@ -660,7 +660,7 @@ class RepetitionTracker:
                 trigram = " ".join(words[i:i+3])
                 self.phrase_counts[trigram] += 1
             self.phrase_counts[h] += 1
-    
+
     def is_repetitive(self, text, threshold=2):
         text_lower = text.lower().strip()
         if self.phrase_counts[text_lower] >= threshold:
@@ -671,11 +671,11 @@ class RepetitionTracker:
             if self.phrase_counts[bigram] >= threshold + 1:
                 return True
         return False
-    
+
     def get_recent_phrases(self, count=5):
         most_common = self.phrase_counts.most_common(count)
         return ", ".join([p[0] for p in most_common if p[1] >= 2])
-    
+
     def clear(self):
         self.history = []
         self.phrase_counts = Counter()
@@ -692,10 +692,10 @@ class ConversationMemory:
         self.mentioned_kinks = []
         self.conversation_topics = []
         self.asked_name = False
-    
+
     def extract_facts(self, message):
         msg_lower = message.lower()
-        
+
         if not self.user_name:
             patterns = [
                 r"my name is (\w+)", r"im (\w+)", r"i am (\w+)", r"call me (\w+)",
@@ -708,14 +708,14 @@ class ConversationMemory:
                     if name.lower() not in ["i", "a", "the", "my", "ur", "from", "india", "here", "there", "yes", "no", "ok", "yeah", "sure", "m", "f", "hi", "hey", "hello", "sup", "yo"]:
                         self.user_name = name
                         break
-        
+
         if not self.user_age:
             age_match = re.search(r"im (\d{1,2})\b", msg_lower)
             if age_match:
                 age = int(age_match.group(1))
                 if 18 <= age <= 60:
                     self.user_age = age
-        
+
         if not self.user_location:
             loc_patterns = [r"from (\w+)", r"in (\w+)", r"(\w+) boy", r"(\w+) here"]
             for pattern in loc_patterns:
@@ -725,16 +725,16 @@ class ConversationMemory:
                     if loc.lower() not in ["i", "a", "the", "my", "ur", "here", "there", "yes", "no", "ok"]:
                         self.user_location = loc
                         break
-        
+
         interest_words = ["gaming", "music", "movies", "sports", "reading", "travel", "cooking", "gym", "fitness", "coding", "anime", "football", "cricket"]
         for word in interest_words:
             if word in msg_lower and word not in self.user_interests:
                 self.user_interests.append(word)
-        
+
         if len(self.conversation_topics) > 10:
             self.conversation_topics.pop(0)
         self.conversation_topics.append(msg_lower[:50])
-    
+
     def get_memory_hint(self):
         hints = []
         if self.user_name:
@@ -746,7 +746,7 @@ class ConversationMemory:
         if self.user_interests:
             hints.append(f"he likes {', '.join(self.user_interests[-3:])}")
         return " | ".join(hints) if hints else ""
-    
+
     def reset(self):
         self.__init__()
 
@@ -855,7 +855,7 @@ class ChatBot:
             base = 10
         else:
             base = 11
-        
+
         last_user_msg = ""
         for entry in reversed(self.chat_history):
             if entry["role"] == "user":
@@ -904,20 +904,20 @@ async def get_ai_response(message_text):
     system_msg = build_system_prompt(bot_state.phase, persona)
     user_vibe = detect_user_vibe(message_text)
     recent_phrases = bot_state.rep_tracker.get_recent_phrases(5)
-    
+
     prompt = build_user_prompt(
         bot_state.phase, persona, history, message_text,
         bot_state.memory.user_name, user_vibe, recent_phrases
     )
-    
+
     messages = [
         {"role": "system", "content": system_msg},
         {"role": "user", "content": prompt}
     ]
-    
+
     temps = {1: 0.82, 2: 0.84, 3: 0.86, 4: 0.88, 5: 0.89, 6: 0.90, 7: 0.91, 8: 0.92, 9: 0.93, 10: 0.94, 11: 0.95}
     tokens = {1: 20, 2: 21, 3: 22, 4: 24, 5: 26, 6: 27, 7: 28, 8: 29, 9: 30, 10: 31, 11: 32}
-    
+
     if groq_client:
         try:
             response = await groq_client.post("/chat/completions", json={
@@ -935,7 +935,7 @@ async def get_ai_response(message_text):
                 return clean_response(text)
         except Exception as e:
             print(f"[{now()}] [Groq Error] {e}")
-    
+
     if mistral_client:
         try:
             response = await mistral_client.post("/chat/completions", json={
@@ -953,7 +953,7 @@ async def get_ai_response(message_text):
                 return clean_response(text)
         except Exception as e:
             print(f"[{now()}] [Mistral Error] {e}")
-    
+
     return get_smart_fallback(message_text, bot_state.phase)
 
 # =============================================================================
@@ -1051,35 +1051,35 @@ def get_smart_fallback(message, phase):
 
 def clean_response(text):
     text = text.strip().strip('"').strip("'")
-    
+
     for name in NAMES_POOL:
         if text.lower().startswith(f"{name.lower()}:"):
             text = text[len(name)+1:].strip()
     if text.lower().startswith("him:") or text.lower().startswith("stranger:"):
         text = text.split(":", 1)[-1].strip()
-    
+
     while text and (ord(text[-1]) > 127 or text[-1] in ". ,;:!?"):
         text = text[:-1].strip()
-    
+
     for phrase in FORBIDDEN_WORDS:
         if phrase.lower() in text.lower():
             print(f"[{now()}] [FILTER] Forbidden phrase detected")
             return get_smart_fallback("", bot_state.phase)
-    
+
     if is_male_dominant(text):
         print(f"[{now()}] [FILTER] Male-dominant phrase detected")
         return get_smart_fallback("", bot_state.phase)
-    
+
     if bot_state.rep_tracker.is_repetitive(text, threshold=1):
         print(f"[{now()}] [FILTER] Repetitive phrase detected, using fallback")
         return get_smart_fallback("", bot_state.phase)
-    
+
     if bot_state.last_sent_text and text.lower() == bot_state.last_sent_text.lower():
         return get_smart_fallback("", bot_state.phase)
-    
+
     if len(text) < 2:
         return get_smart_fallback("", bot_state.phase)
-    
+
     return text
 
 # =============================================================================
@@ -1132,7 +1132,7 @@ async def find_and_click_button(button_text, message_id=None, search_recent=Fals
                                 return True
             except Exception as e:
                 print(f"[{now()}] [get_messages error] {e}")
-        
+
         limit = 15 if search_recent else 10
         async for message in client.iter_messages(TARGET_BOT, limit=limit):
             if message.buttons:
@@ -1232,7 +1232,7 @@ async def send_next():
 async def send_stop_and_report():
     if not bot_state.can_perform_action(cooldown=3):
         return
-    
+
     clicked_stop = False
     if bot_state._matched_message_id:
         print(f"[{now()}] Trying to click Stop on msg_id={bot_state._matched_message_id}")
@@ -1240,7 +1240,7 @@ async def send_stop_and_report():
     if not clicked_stop:
         print(f"[{now()}] Searching for Stop button in recent messages...")
         clicked_stop = await click_stop_button()
-    
+
     if clicked_stop:
         print(f"[{now()}] -> Stop button clicked")
         async with bot_state._lock:
@@ -1562,7 +1562,7 @@ async def handle_chat_ended(msg_id, has_buttons, button_texts, text=""):
         await send_stop_and_report()
 
 # =============================================================================
-# MESSAGE HANDLER
+# MESSAGE HANDLER - FIXED PHASE 1 DIRECT ANSWERS
 # =============================================================================
 @client.on(events.NewMessage(chats=TARGET_BOT))
 async def handle_message(event):
@@ -1631,7 +1631,7 @@ async def handle_message(event):
         # Extract user info
         bot_state.memory.extract_facts(text)
 
-        # ===== PHASE 1: FIRST 2 MINUTES - NO AI, ONLY CONTEXTUAL HARDCODED RESPONSES =====
+        # ===== PHASE 1: FIRST 2 MINUTES - DIRECT ANSWERS ONLY =====
         if is_first_2_mins:
             bot_state.pending_reply = True
             await asyncio.sleep(random.randint(2,5))
@@ -1639,25 +1639,42 @@ async def handle_message(event):
             msg_lower = text_lower
             reply = None
 
-            # ===== DIRECT ANSWERS TO DIRECT QUESTIONS =====
-            if any(w in msg_lower for w in ["where u from","where are you from","where from","location","city","from where","where do you live"]):
-                reply = f"india, {persona.location}"
-            elif any(w in msg_lower for w in ["age","how old","ur age","your age","how many years","old are you"]):
-                reply = f"{persona.age}"
-            elif any(w in msg_lower for w in ["name","who are u","who are you","ur name","your name","what is your name","whats ur name"]):
-                reply = f"{persona.name}"
-            elif text_clean in ["M","F","m","f"] or any(w in msg_lower for w in ["m or f","m/f","male or female","gender"]):
+            # ===== PRIORITY 1: DIRECT ANSWERS TO DIRECT QUESTIONS =====
+            # These MUST come first before any contextual/greeting checks
+
+            # Gender - single letter or direct question (CRITICAL FIX)
+            if text_clean in ["M","F","m","f"] or any(w in msg_lower for w in ["m or f","m/f","male or female","gender","u?","u ?","you?","you ?","m?","f?"]):
                 reply = "F"
+
+            # Name - check BEFORE generic "who are you" 
+            elif any(w in msg_lower for w in ["name","who are u","who are you","ur name","your name","what is your name","whats ur name","whats your name"]):
+                reply = f"{persona.name}"
+
+            # Age
+            elif any(w in msg_lower for w in ["age","how old","ur age","your age","old are you","how many years"]):
+                reply = f"{persona.age}"
+
+            # Location
+            elif any(w in msg_lower for w in ["where u from","where are you from","where from","location","city","from where","where do you live","where are u from"]):
+                reply = f"india, {persona.location}"
+
+            # Relationship status
             elif any(w in msg_lower for w in ["relationship","status","married","single","divorce","bf","boyfriend","husband"]):
                 reply = "divorced lol"
+
+            # Kids
             elif any(w in msg_lower for w in ["kids","children","baby","son","daughter"]):
                 reply = random.choice(["nah no kids","no kids","just me"])
-            elif any(w in msg_lower for w in ["work","job","profession","what do u do","career","study","student","college"]):
+
+            # Work/Job
+            elif any(w in msg_lower for w in ["work","job","profession","what do u do","career","study","student","college","what u do"]):
                 reply = random.choice(["i work","office job","nothing fancy","just working","corporate life"])
+
+            # Contact info requests
             elif any(w in msg_lower for w in ["telegram","insta","instagram","snap","snapchat","whatsapp","number","phone","contact","dm","link","id","@","t.me"]):
                 reply = random.choice(CONTACT_DEFLECTIONS[:10])
 
-            # ===== CONTEXTUAL RESPONSES TO WHAT USER ACTUALLY SAID =====
+            # ===== PRIORITY 2: CONTEXTUAL RESPONSES (only if no direct answer matched) =====
             elif not reply:
                 # Greetings
                 if any(w in msg_lower for w in ["hey","hi","hello","sup","yo","hola"]):
@@ -1673,13 +1690,12 @@ async def handle_message(event):
 
                 # User shares their name
                 elif any(w in msg_lower for w in ["my name is","im ","i am ","call me ","name is ","i'm "]):
-                    # Extract name and respond
                     bot_state.memory.extract_facts(text)
                     user_name = bot_state.memory.user_name
                     if user_name:
                         reply = random.choice([f"nice to meet u {user_name}",f"hey {user_name}",f"{user_name} nice name",f"cool im {persona.name}"])
                     else:
-                        reply = random.choice(["nice to meet u","cool","im {persona.name}"])
+                        reply = random.choice(["nice to meet u","cool",f"im {persona.name}"])
 
                 # "Me too / Same" -> acknowledge
                 elif any(w in msg_lower for w in ["me too","same","same here","me also","i also","i too"]):
@@ -1862,6 +1878,7 @@ async def handle_message(event):
             print(f"[{now()}] [Error] send: {e}")
         finally:
             bot_state.pending_reply = False
+
     elif bot_state.state == BotState.RATING:
         if bot_state._rating_start_time:
             rating_elapsed = (datetime.now() - bot_state._rating_start_time).total_seconds()
@@ -1877,7 +1894,7 @@ async def handle_message(event):
                 await select_report_other()
                 return
             if is_rating_screen(button_texts):
-                print(f"[{now()}] Rating screen with Report button")
+                print(f"[{now()}] Rating screen with Report button in RATING")
                 bot_state.report_buttons_message_id = msg_id
                 await asyncio.sleep(1)
                 await send_report()
@@ -2128,7 +2145,7 @@ async def keep_alive():
         print(f"[{now()}] [KEEPALIVE] State: {bot_state.state}, Phase: {bot_state.phase}, Session: {bot_state._chat_session_id}, Tasks: {len(bot_state._active_tasks)}")
 
 async def main():
-    print("Riya v11.0 starting...")
+    print("Riya v12.0 starting...")
     if not TELEGRAM_API_ID or not TELEGRAM_API_HASH:
         print("Missing API credentials!")
         return
