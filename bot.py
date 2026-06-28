@@ -968,17 +968,21 @@ def get_smart_fallback(message, phase):
     is_short = len(message.strip()) < 10
     is_stepmom_hint = any(w in msg_lower for w in ["mom","stepmom","mother","mummy","aunty","bhabhi"])
     is_contact_request = any(w in msg_lower for w in ["telegram","insta","instagram","snap","snapchat","whatsapp","number","phone","contact","dm","link","id","@","t.me"])
-    
+
+    user_name = bot_state.memory.user_name
+
     pool = get_fallback_pool(phase, persona)
     available = [p for p in pool if not bot_state.rep_tracker.is_repetitive(p, threshold=1)]
     if not available:
         available = pool
-    
+
     if phase == 1:
         if is_stepmom_hint:
             choices = ["lol why u sayin that","u got a thing for older women","im just a girl","maybe i am maybe im not","u wish"]
         elif is_contact_request:
             choices = CONTACT_DEFLECTIONS[:10]
+        elif any(w in msg_lower for w in ["name","who are u","who are you","ur name","your name","what is your name","whats ur name"]):
+            choices = [f"{persona.name}","im {persona.name}","call me {persona.name}"]
         elif is_question:
             choices = [f"im {persona.name}",f"im from {persona.location}",f"im {persona.age} and divorced lol","tell me bout u first","whats ur name btw","im just a girl lol"]
         elif is_resistance:
@@ -987,10 +991,10 @@ def get_smart_fallback(message, phase):
             choices = ["tell me more","u bein shy","say somethin sweet","im listenin","u got my attention"]
         else:
             choices = ["u interestin","i like u already","u make me smile","keep talkin","im feelin this vibe","u sweet"]
-            if bot_state.memory.user_name:
-                choices.extend([f"hey {bot_state.memory.user_name}",f"u cute {bot_state.memory.user_name}",f"miss me yet {bot_state.memory.user_name}"])
+            if user_name:
+                choices.extend([f"hey {user_name}",f"u cute {user_name}",f"miss me yet {user_name}"])
         return random.choice(choices)
-    
+
     elif phase == 2:
         if is_stepmom_hint:
             choices = ["u caught me","maybe i take care of u","u want an older woman huh","ill be whatever u need","experienced energy huh"]
@@ -1002,12 +1006,16 @@ def get_smart_fallback(message, phase):
             choices = ["u love it tho","dont lie to me","ur eyes say yes","u aint goin nowhere","i got u now"]
         elif is_friendly:
             choices = ["ur so sweet","u makin me blush","my heart beatin fast","u special u know that","aww"]
+            if user_name:
+                choices.extend([f"{user_name} u sweet",f"aww {user_name}",f"u cute {user_name}"])
         elif is_sexual:
             choices = ["slow down tiger","who said u get that","earn it first","u move too fast","patience"]
         else:
             choices = ["u got game","keep goin","im listenin","u interestin","maybe ur worth it","thats cute"]
+            if user_name:
+                choices.extend([f"{user_name} u got game",f"im watchin u {user_name}",f"u interestin {user_name}"])
         return random.choice(choices)
-    
+
     elif phase == 3:
         if is_stepmom_hint:
             choices = ["come here","let me hold u","im gonna take care of u","u my special boy","i love u"]
@@ -1019,8 +1027,10 @@ def get_smart_fallback(message, phase):
             choices = ["get closer first","show me ur worthy","beg for it","u want it? prove it",f"say please {persona.name}"]
         else:
             choices = ["get on ur knees","look at me","dont touch yet","u wish u could feel this","my skin burnin","beg for it","say please","u want me dont u","look but dont touch"]
+            if user_name:
+                choices.extend([f"come here {user_name}",f"look at me {user_name}",f"u want me {user_name}"])
         return random.choice(choices)
-    
+
     else:
         if is_stepmom_hint:
             choices = ["i need ur cock","fuck me like a good boy","my pussy wet for u","cum inside me","im gonna drain u"]
@@ -1030,16 +1040,15 @@ def get_smart_fallback(message, phase):
             choices = ["shut up and take it","u takin it all","dont fight me","u love this dick","cum for me now","be a good boy"]
         else:
             choices = available
-        
+            if user_name:
+                choices.extend([f"fuck me {user_name}",f"cum for me {user_name}",f"i need u {user_name}",f"u own me {user_name}"])
+
         for _ in range(10):
             choice = random.choice(choices)
             if not bot_state.rep_tracker.is_repetitive(choice, threshold=1):
                 return choice
         return random.choice(choices)
 
-# =============================================================================
-# RESPONSE CLEANER
-# =============================================================================
 def clean_response(text):
     text = text.strip().strip('"').strip("'")
     
@@ -1673,17 +1682,31 @@ async def handle_message(event):
                 if not available:
                     available = pool
 
-                # Try to be contextual based on what they said
-                if any(w in msg_lower for w in ["hey","hi","hello","sup","yo","hola"]):
-                    reply = random.choice(["hey","hi","sup","yo","hey there","hii"])
-                elif any(w in msg_lower for w in ["how are u","how r u","how u doin","hows it going","how u been"]):
-                    reply = random.choice(["im good","doin okay","chillin","not bad","pretty good"])
-                elif "?" in text:
-                    reply = random.choice(["why u askin","u curious huh","tell me bout u first","u interviewin me lol","ask somethin fun"])
-                elif len(text_clean) < 5:
-                    reply = random.choice(["say more","thats it?","u bein shy","elaborate","go on"])
-                else:
-                    reply = random.choice(available)
+                # NATURAL NAME ASKING: After 3-5 messages, if name unknown, casually ask
+                if not bot_state.memory.user_name and not bot_state.memory.asked_name and bot_state.message_count >= 3 and bot_state.message_count <= 6:
+                    if random.random() < 0.4:  # 40% chance to ask naturally
+                        bot_state.memory.asked_name = True
+                        name_asks = [
+                            "btw whats ur name",
+                            "what do they call u",
+                            "i dont even know ur name lol",
+                            "who am i talking to",
+                            "whats ur name"
+                        ]
+                        reply = random.choice(name_asks)
+
+                if not reply:
+                    # Try to be contextual based on what they said
+                    if any(w in msg_lower for w in ["hey","hi","hello","sup","yo","hola"]):
+                        reply = random.choice(["hey","hi","sup","yo","hey there","hii"])
+                    elif any(w in msg_lower for w in ["how are u","how r u","how u doin","hows it going","how u been"]):
+                        reply = random.choice(["im good","doin okay","chillin","not bad","pretty good"])
+                    elif "?" in text:
+                        reply = random.choice(["why u askin","u curious huh","tell me bout u first","u interviewin me lol","ask somethin fun"])
+                    elif len(text_clean) < 5:
+                        reply = random.choice(["say more","thats it?","u bein shy","elaborate","go on"])
+                    else:
+                        reply = random.choice(available)
 
             if not reply:
                 reply = random.choice(["hey","sup","im good","chillin","tell me bout u"])
@@ -1704,6 +1727,7 @@ async def handle_message(event):
                 bot_state.pending_reply = False
             return
         # ===== END PHASE 1 BLOCK =====
+
 
         if has_media or text == "[media]":
             bot_state.pending_reply = True
