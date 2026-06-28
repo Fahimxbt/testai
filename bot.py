@@ -1631,85 +1631,59 @@ async def handle_message(event):
         # Extract user info
         bot_state.memory.extract_facts(text)
 
-        # ===== M/F HANDLING =====
-        mf_patterns = ["m or f", "m/f", "male or female", "gender", "m?", "f?"]
-        is_mf_question = any(p in text_lower for p in mf_patterns) or text_clean in ["M","F","m","f","M?","F?","m?","f?"]
-
-        if is_mf_question:
-            bot_state.pending_reply = True
-            await asyncio.sleep(1)
-            try:
-                sent = await client.send_message(TARGET_BOT, "F")
-                bot_message_ids.add(sent.id)
-                bot_state.chat_history.append({"role":"user","content":text_clean})
-                bot_state.chat_history.append({"role":"assistant","content":"F"})
-                print(f"[{now()}] Direct reply: F (M/F question)")
-            except Exception as e:
-                print(f"[{now()}] [Error] M/F: {e}")
-            finally:
-                bot_state.pending_reply = False
-            return
-
-        # ===== PHASE 1: FIRST 2 MINUTES - NO AI, ONLY HARDCODED CASUAL RESPONSES =====
+        # ===== PHASE 1: FIRST 2 MINUTES - DIRECT, SIMPLE, NO BULLSHIT =====
         if is_first_2_mins:
             bot_state.pending_reply = True
-            await asyncio.sleep(random.randint(2,5))
+            await asyncio.sleep(random.randint(2,4))
 
-            msg_lower = text_lower
+            msg_lower = text_lower.strip()
             reply = None
 
-            # Direct factual questions -> direct answers
-            if any(w in msg_lower for w in ["where u from","where are you from","where from","location","city","from where","where do you live"]):
-                reply = f"india, {persona.location}"
-            elif any(w in msg_lower for w in ["age","how old","ur age","your age","how many years","old are you"]):
-                reply = f"{persona.age}"
-            elif any(w in msg_lower for w in ["name","who are u","who are you","ur name","your name","what is your name","whats ur name"]):
-                reply = f"{persona.name}"
-            elif any(w in msg_lower for w in ["m or f","m/f","male or female","gender"]):
+            # DIRECT ANSWERS - parse what they actually want to know
+            if msg_lower in ["m","f","m?","f?","male","female"] or any(p in msg_lower for p in ["m or f","m/f","male or female","gender","m ?","f ?"]):
                 reply = "F"
-            elif any(w in msg_lower for w in ["relationship","status","married","single","divorce","bf","boyfriend","husband"]):
+            elif any(w in msg_lower for w in ["where u from","where are you from","where from","where do you live","u from","ur city","ur location","from where","which city","where r u","where are u"]):
+                reply = f"india, {persona.location}"
+            elif any(w in msg_lower for w in ["age","how old","ur age","your age","old are you","how many years","what age"]):
+                reply = f"{persona.age}"
+            elif any(w in msg_lower for w in ["name","who are u","who are you","ur name","your name","what is your name","whats ur name","what's ur name","what your name"]):
+                reply = f"{persona.name}"
+            elif any(w in msg_lower for w in ["relationship","status","married","single","divorce","bf","boyfriend","husband","u married","u single"]):
                 reply = "divorced lol"
-            elif any(w in msg_lower for w in ["kids","children","baby","son","daughter"]):
+            elif any(w in msg_lower for w in ["kids","children","baby","son","daughter","u have kids"]):
                 reply = random.choice(["nah no kids","no kids","just me"])
-            elif any(w in msg_lower for w in ["work","job","profession","what do u do","career","study","student","college"]):
+            elif any(w in msg_lower for w in ["work","job","profession","what do u do","career","study","student","college","what u do","u work","u study"]):
                 reply = random.choice(["i work","office job","nothing fancy","just working","corporate life"])
-            elif any(w in msg_lower for w in ["telegram","insta","instagram","snap","snapchat","whatsapp","number","phone","contact","dm","link","id","@","t.me"]):
+            elif any(w in msg_lower for w in ["telegram","insta","instagram","snap","snapchat","whatsapp","number","phone","contact","dm","link","id","@","t.me","insta id","snap id","whatsapp no"]):
                 reply = random.choice(CONTACT_DEFLECTIONS[:10])
+            elif any(w in msg_lower for w in ["hey","hi","hello","sup","yo","hola","heyy","heyyy"]):
+                # Greeting -> greeting back, maybe ask their name if unknown
+                if not bot_state.memory.user_name and not bot_state.memory.asked_name and bot_state.message_count >= 2:
+                    bot_state.memory.asked_name = True
+                    reply = random.choice(["hey whats ur name","hi im {name} u?","sup whats ur name","yo who dis"]).format(name=persona.name)
+                else:
+                    reply = random.choice(["hey","hi","sup","yo","hey there"])
+            elif any(w in msg_lower for w in ["how are u","how r u","how u doin","hows it going","how u been","how are you","hows u"]):
+                reply = random.choice(["im good","doin okay","chillin","not bad","pretty good"])
+            elif any(w in msg_lower for w in ["what u up to","what u doing","what u doin","wassup","whats up","whats good","sup"]):
+                reply = random.choice(["chillin","nothin much","just vibin","bored","killin time"])
+            elif "?" in text:
+                # Any other question -> direct simple answer or turn it back
+                reply = random.choice(["why u askin","tell me bout u first","u curious huh","ask somethin fun","u interviewin me lol"])
             else:
-                # Casual conversation - use fallback pool, NOT AI
-                pool = get_fallback_pool(1, persona)
-                available = [p for p in pool if not bot_state.rep_tracker.is_repetitive(p, threshold=1)]
-                if not available:
-                    available = pool
-
-                # NATURAL NAME ASKING: After 3-5 messages, if name unknown, casually ask
-                if not bot_state.memory.user_name and not bot_state.memory.asked_name and bot_state.message_count >= 3 and bot_state.message_count <= 6:
-                    if random.random() < 0.4:  # 40% chance to ask naturally
-                        bot_state.memory.asked_name = True
-                        name_asks = [
-                            "btw whats ur name",
-                            "what do they call u",
-                            "i dont even know ur name lol",
-                            "who am i talking to",
-                            "whats ur name"
-                        ]
-                        reply = random.choice(name_asks)
-
-                if not reply:
-                    # Try to be contextual based on what they said
-                    if any(w in msg_lower for w in ["hey","hi","hello","sup","yo","hola"]):
-                        reply = random.choice(["hey","hi","sup","yo","hey there","hii"])
-                    elif any(w in msg_lower for w in ["how are u","how r u","how u doin","hows it going","how u been"]):
-                        reply = random.choice(["im good","doin okay","chillin","not bad","pretty good"])
-                    elif "?" in text:
-                        reply = random.choice(["why u askin","u curious huh","tell me bout u first","u interviewin me lol","ask somethin fun"])
-                    elif len(text_clean) < 5:
-                        reply = random.choice(["say more","thats it?","u bein shy","elaborate","go on"])
-                    else:
-                        reply = random.choice(available)
+                # Short/casual message -> direct response, NEVER "go on" or "say more"
+                if len(text_clean) < 3:
+                    reply = random.choice(["what","huh","yeah","ok","hm"])
+                else:
+                    # Use fallback pool for variety
+                    pool = get_fallback_pool(1, persona)
+                    available = [p for p in pool if not bot_state.rep_tracker.is_repetitive(p, threshold=1)]
+                    if not available:
+                        available = pool
+                    reply = random.choice(available)
 
             if not reply:
-                reply = random.choice(["hey","sup","im good","chillin","tell me bout u"])
+                reply = random.choice(["hey","sup","im good","chillin"])
 
             bot_state.last_sent_text = reply
             bot_state.chat_history.append({"role":"user","content":text})
@@ -1727,7 +1701,6 @@ async def handle_message(event):
                 bot_state.pending_reply = False
             return
         # ===== END PHASE 1 BLOCK =====
-
 
         if has_media or text == "[media]":
             bot_state.pending_reply = True
@@ -1801,7 +1774,6 @@ async def handle_message(event):
             print(f"[{now()}] [Error] send: {e}")
         finally:
             bot_state.pending_reply = False
-
     elif bot_state.state == BotState.RATING:
         if bot_state._rating_start_time:
             rating_elapsed = (datetime.now() - bot_state._rating_start_time).total_seconds()
