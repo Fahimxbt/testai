@@ -115,7 +115,11 @@ FALLBACK_POOLS = {
         "u seem interesting","im just chillin","bored af rn","u busy",
         "tell me somethin fun","u got hobbies","what u into",
         "im new to this","u talk to many ppl here","this is different",
-        "so whats ur story","u a student or working","weekend plans"
+        "so whats ur story","u a student or working","weekend plans",
+        "u from around here","what u doin rn","hows life",
+        "u seem chill","what u study","u workin or what",
+        "im just killin time","u got plans today","whats good",
+        "hows ur week been","u do this often","tell me somethin random"
     ],
     2: [
         "u got me blushin","my hearts beatin fast rn","u know how to talk to a girl",
@@ -265,44 +269,34 @@ def get_fallback_pool(phase, persona_obj):
 # =============================================================================
 OPENINGS = {
     "warm_nurturing": [
-        "hey there","hi sweetie","hello bby","hey u","hii there",
-        "hey whats up","hi cutie","hello there","hey bby","hi love"
+        "hey","hi","sup","yo","hey there","hii","hello","whats up"
     ],
     "playful_teasing": [
-        "sup trouble","yo mischief","hey bad boy","hii flirt","yo cutie",
-        "sup handsome","hey troublemaker","hi there player","yo sweetie","hey u"
+        "sup","yo","hey","hi there","hey u","hola","whats up","hey there"
     ],
     "seductive_caring": [
-        "hey bby","hi there love","hello sweetie","hey cutie","hii bby",
-        "hey gorgeous","hi love","hello bby","hey sweet thing","hi there bby"
+        "hey","hi","hello","hey there","hii","sup","yo","whats up"
     ],
     "dominant_warm": [
-        "hey boy","hi bby","hello there","hey sweetie","hii bby",
-        "hey cutie","hi there bby","hello boy","hey bby boy","hi love"
+        "hey","hi","hello","sup","yo","hey there","hii","whats up"
     ],
     "innocent_slutty": [
-        "hey there","hi","hello","hii","hey",
-        "sup","yo","hola","hey u","hi bby"
+        "hey","hi","hello","hii","sup","yo","hola","hey there"
     ],
     "possessive_divorced": [
-        "hey mine","hi bby","hello there","hey u","hii",
-        "hey cutie","hi there","hello bby","hey sweetie","hi love"
+        "hey","hi","hello","sup","yo","hey there","hii","whats up"
     ],
     "mysterious_experienced": [
-        "hey","hi there","hello","hmm hey","interesting hi",
-        "well hello","hi","hey u","hello there","hi bby"
+        "hey","hi","hello","sup","yo","hey there","hii","whats up"
     ],
     "flirty_confident": [
-        "hey handsome","hi bby","hello cutie","hey there","hii love",
-        "sup bby","yo cutie","hey sweetie","hi there bby","hello love"
+        "hey","hi","hello","sup","yo","hey there","hii","whats up"
     ],
     "wild_freedom": [
-        "yo","sup","hey","hii","hello",
-        "whats up","hey there","hi bby","yo bby","sup cutie"
+        "yo","sup","hey","hii","hello","whats up","hey there","hi"
     ],
     "sensual_teacher": [
-        "hello bby","hi there","hey sweetie","hello","hii",
-        "hey u","hi bby","hello there","hey cutie","hi love"
+        "hey","hi","hello","sup","yo","hey there","hii","whats up"
     ]
 }
 
@@ -1647,70 +1641,69 @@ async def handle_message(event):
                 bot_state.pending_reply = False
             return
 
+        # ===== PHASE 1: FIRST 2 MINUTES - NO AI, ONLY HARDCODED CASUAL RESPONSES =====
         if is_first_2_mins:
-            if any(w in text_lower for w in ["where u from","where are you from","where from","location","city","from where","where do you live"]):
-                bot_state.pending_reply = True
-                await asyncio.sleep(1)
+            bot_state.pending_reply = True
+            await asyncio.sleep(random.randint(2,5))
+
+            msg_lower = text_lower
+            reply = None
+
+            # Direct factual questions -> direct answers
+            if any(w in msg_lower for w in ["where u from","where are you from","where from","location","city","from where","where do you live"]):
                 reply = f"india, {persona.location}"
-                try:
-                    sent = await client.send_message(TARGET_BOT, reply)
-                    bot_message_ids.add(sent.id)
-                    bot_state.chat_history.append({"role":"user","content":text})
-                    bot_state.chat_history.append({"role":"assistant","content":reply})
-                    print(f"[{now()}] Direct reply: {reply}")
-                except Exception as e:
-                    print(f"[{now()}] [Error] location: {e}")
-                finally:
-                    bot_state.pending_reply = False
-                return
-            if any(w in text_lower for w in ["age","how old","ur age","your age","how many years","old are you"]):
-                bot_state.pending_reply = True
-                await asyncio.sleep(1)
+            elif any(w in msg_lower for w in ["age","how old","ur age","your age","how many years","old are you"]):
                 reply = f"{persona.age}"
-                try:
-                    sent = await client.send_message(TARGET_BOT, reply)
-                    bot_message_ids.add(sent.id)
-                    bot_state.chat_history.append({"role":"user","content":text})
-                    bot_state.chat_history.append({"role":"assistant","content":reply})
-                    print(f"[{now()}] Direct reply: {reply}")
-                except Exception as e:
-                    print(f"[{now()}] [Error] age: {e}")
-                finally:
-                    bot_state.pending_reply = False
-                return
-            if any(w in text_lower for w in ["name","who are u","who are you","ur name","your name","what is your name","whats ur name"]):
-                bot_state.pending_reply = True
-                await asyncio.sleep(1)
+            elif any(w in msg_lower for w in ["name","who are u","who are you","ur name","your name","what is your name","whats ur name"]):
                 reply = f"{persona.name}"
-                try:
-                    sent = await client.send_message(TARGET_BOT, reply)
-                    bot_message_ids.add(sent.id)
-                    bot_state.chat_history.append({"role":"user","content":text})
-                    bot_state.chat_history.append({"role":"assistant","content":reply})
-                    print(f"[{now()}] Direct reply: {reply}")
-                except Exception as e:
-                    print(f"[{now()}] [Error] name: {e}")
-                finally:
-                    bot_state.pending_reply = False
-                return
-            # Ask user their name if not asked yet and not known
-            if not bot_state.memory.asked_name and not bot_state.memory.user_name and bot_state.message_count >= 2:
-                bot_state.memory.asked_name = True
-                bot_state.pending_reply = True
-                await asyncio.sleep(1)
-                name_asks = ["whats ur name","what do they call u","who am i talking to","whats ur name bby","tell me ur name"]
-                reply = random.choice(name_asks)
-                try:
-                    sent = await client.send_message(TARGET_BOT, reply)
-                    bot_message_ids.add(sent.id)
-                    bot_state.chat_history.append({"role":"user","content":text})
-                    bot_state.chat_history.append({"role":"assistant","content":reply})
-                    print(f"[{now()}] Asked name: {reply}")
-                except Exception as e:
-                    print(f"[{now()}] [Error] ask name: {e}")
-                finally:
-                    bot_state.pending_reply = False
-                return
+            elif any(w in msg_lower for w in ["m or f","m/f","male or female","gender"]):
+                reply = "F"
+            elif any(w in msg_lower for w in ["relationship","status","married","single","divorce","bf","boyfriend","husband"]):
+                reply = "divorced lol"
+            elif any(w in msg_lower for w in ["kids","children","baby","son","daughter"]):
+                reply = random.choice(["nah no kids","no kids","just me"])
+            elif any(w in msg_lower for w in ["work","job","profession","what do u do","career","study","student","college"]):
+                reply = random.choice(["i work","office job","nothing fancy","just working","corporate life"])
+            elif any(w in msg_lower for w in ["telegram","insta","instagram","snap","snapchat","whatsapp","number","phone","contact","dm","link","id","@","t.me"]):
+                reply = random.choice(CONTACT_DEFLECTIONS[:10])
+            else:
+                # Casual conversation - use fallback pool, NOT AI
+                pool = get_fallback_pool(1, persona)
+                available = [p for p in pool if not bot_state.rep_tracker.is_repetitive(p, threshold=1)]
+                if not available:
+                    available = pool
+
+                # Try to be contextual based on what they said
+                if any(w in msg_lower for w in ["hey","hi","hello","sup","yo","hola"]):
+                    reply = random.choice(["hey","hi","sup","yo","hey there","hii"])
+                elif any(w in msg_lower for w in ["how are u","how r u","how u doin","hows it going","how u been"]):
+                    reply = random.choice(["im good","doin okay","chillin","not bad","pretty good"])
+                elif "?" in text:
+                    reply = random.choice(["why u askin","u curious huh","tell me bout u first","u interviewin me lol","ask somethin fun"])
+                elif len(text_clean) < 5:
+                    reply = random.choice(["say more","thats it?","u bein shy","elaborate","go on"])
+                else:
+                    reply = random.choice(available)
+
+            if not reply:
+                reply = random.choice(["hey","sup","im good","chillin","tell me bout u"])
+
+            bot_state.last_sent_text = reply
+            bot_state.chat_history.append({"role":"user","content":text})
+            bot_state.chat_history.append({"role":"assistant","content":reply})
+            bot_state.rep_tracker.add(reply)
+            bot_state.message_count += 1
+            bot_state.last_message_time = datetime.now()
+            try:
+                sent = await client.send_message(TARGET_BOT, reply)
+                bot_message_ids.add(sent.id)
+                print(f"[{now()}] P1 Reply: {reply}")
+            except Exception as e:
+                print(f"[{now()}] [Error] P1 send: {e}")
+            finally:
+                bot_state.pending_reply = False
+            return
+        # ===== END PHASE 1 BLOCK =====
 
         if has_media or text == "[media]":
             bot_state.pending_reply = True
@@ -1718,7 +1711,6 @@ async def handle_message(event):
             await asyncio.sleep(random.randint(4,8))
             bot_state.update_phase()
             media_pool = MEDIA_RESPONSES.get(bot_state.phase, MEDIA_RESPONSES[1])
-            # Filter out recently used
             available_media = [m for m in media_pool if not bot_state.rep_tracker.is_repetitive(m, threshold=1)]
             if not available_media:
                 available_media = media_pool
@@ -1751,7 +1743,7 @@ async def handle_message(event):
                 print(f"[{now()}] Rate limit: {elapsed:.1f}s")
                 return
 
-        # Extract user info again (in case missed earlier)
+        # Extract user info again
         bot_state.memory.extract_facts(text)
 
         bot_state.pending_reply = True
@@ -2083,3 +2075,4 @@ if __name__ == "__main__":
         print("\nShutdown...")
     except Exception as e:
         print(f"Fatal: {e}")
+        traceback.print_exc()
