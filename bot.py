@@ -1676,14 +1676,18 @@ async def handle_message(event):
             # ===== PRIORITY 1: DIRECT ANSWERS TO DIRECT QUESTIONS =====
             # These MUST come first before any contextual/greeting checks
 
-            # Gender - catch ALL variations of male/female/m/f questions
+            # Gender - catch ALL variations of male/female/m/f
+            # Pattern 1: Gender questions (m or f, u?, etc.)
             gender_keywords = ["m or f", "m/f", "male or female", "gender", "u?", "u ?", "you?", "you ?", "m?", "f?", "male?", "female?", "m/f?"]
             if any(w in msg_lower for w in gender_keywords):
                 reply = "F"
-            # Single letter M/F or exact word male/female (case insensitive)
+            # Pattern 2: Exact match single word/letter
             elif text_clean.lower() in ["m", "f", "male", "female", "m.", "f.", "m?", "f?"]:
                 reply = "F"
-            # Phrases like "i am male", "im m", etc.
+            # Pattern 3: Message starts with M/Male/F/Female as first word (e.g. "M here", "Male 23", "F 20")
+            elif any(text_clean.lower().startswith(w) for w in ["m ", "male ", "f ", "female ", "m,", "male,", "f,", "female,"]):
+                reply = "F"
+            # Pattern 4: Phrases like "i am male", "im m", etc.
             elif any(w in msg_lower for w in ["i am male", "i'm male", "im male", "i am m", "i'm m", "im m", "i am female", "i'm female", "im female"]):
                 reply = "F"
 
