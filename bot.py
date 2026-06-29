@@ -1642,11 +1642,14 @@ async def handle_message(event):
             # ===== PRIORITY 1: DIRECT ANSWERS TO DIRECT QUESTIONS =====
             # These MUST come first before any contextual/greeting checks
 
-            # Gender - single letter or direct question (CRITICAL FIX)
+            # Gender - exact match or "male/female" questions
             if text_clean in ["M","F","m","f"] or any(w in msg_lower for w in ["m or f","m/f","male or female","gender","u?","u ?","you?","you ?","m?","f?"]):
                 reply = "F"
+            # Also catch "male" or "female" explicitly stated
+            elif text_clean.lower() in ["male", "female", "m", "f"] or any(w in msg_lower for w in ["i am male", "i'm male", "im male", "i am m", "i'm m", "im m"]):
+                reply = "F"
 
-            # Name - check BEFORE generic "who are you" 
+            # Name
             elif any(w in msg_lower for w in ["name","who are u","who are you","ur name","your name","what is your name","whats ur name","whats your name"]):
                 reply = f"{persona.name}"
 
@@ -1675,7 +1678,7 @@ async def handle_message(event):
                 reply = random.choice(CONTACT_DEFLECTIONS[:10])
 
             # ===== PRIORITY 2: CONTEXTUAL RESPONSES (only if no direct answer matched) =====
-            elif not reply:
+            if not reply:
                 # Greetings
                 if any(w in msg_lower for w in ["hey","hi","hello","sup","yo","hola"]):
                     reply = random.choice(["hey","hi","sup","yo","hey there","hii","whats up"])
@@ -1774,8 +1777,11 @@ async def handle_message(event):
                     reply = random.choice(available)
 
             # NATURAL NAME ASKING: After 3-5 messages, if name unknown, casually ask
-            if not reply or (not bot_state.memory.user_name and not bot_state.memory.asked_name and bot_state.message_count >= 3 and bot_state.message_count <= 6 and random.random() < 0.35):
-                if not bot_state.memory.user_name and not bot_state.memory.asked_name and bot_state.message_count >= 3:
+            # BUT ONLY if we already have a reply and it's not a direct answer to a question
+            # AND only 35% chance so it doesn't feel forced
+            if reply and not bot_state.memory.user_name and not bot_state.memory.asked_name and bot_state.message_count >= 3 and bot_state.message_count <= 6 and random.random() < 0.35:
+                # Only append name ask if reply is short and casual, not a direct answer
+                if reply not in ["F", f"{persona.name}", f"{persona.age}", f"india, {persona.location}", "divorced lol"]:
                     bot_state.memory.asked_name = True
                     name_asks = [
                         "btw whats ur name",
@@ -1784,7 +1790,9 @@ async def handle_message(event):
                         "who am i talking to",
                         "whats ur name"
                     ]
-                    reply = random.choice(name_asks)
+                    # We can only send one message here, so just send the reply
+                    # The name ask will happen on next turn if still needed
+                    pass
 
             if not reply:
                 reply = random.choice(["hey","sup","im good","chillin","tell me bout u"])
