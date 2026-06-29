@@ -965,13 +965,12 @@ async def get_ai_response(message_text):
     if gemini_client and GEMINI_API_KEY:
         try:
             gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-001:generateContent?key={GEMINI_API_KEY}"
+            gemini_prompt = system_msg + "\n\n" + prompt
             gemini_payload = {
                 "contents": [
                     {
                         "role": "user",
-                        "parts": [{"text": f"{system_msg}
-
-{prompt}"}]
+                        "parts": [{"text": gemini_prompt}]
                     }
                 ],
                 "generationConfig": {
