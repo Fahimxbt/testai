@@ -1632,6 +1632,9 @@ async def handle_message(event):
             bot_state._track_task(bot_state._auto_end_task)
             await asyncio.sleep(3)
             opening = get_opening(persona)
+            # First message should include gender hint if opening is generic
+            if opening.lower() in ["hey", "hi", "sup", "yo", "hola", "hello"]:
+                opening = random.choice(["hey im F", "hi F here", "hey female here", "hii F", "sup im a girl"])
             try:
                 sent = await client.send_message(TARGET_BOT, opening)
                 bot_message_ids.add(sent.id)
@@ -1676,19 +1679,13 @@ async def handle_message(event):
             # ===== PRIORITY 1: DIRECT ANSWERS TO DIRECT QUESTIONS =====
             # These MUST come first before any contextual/greeting checks
 
-            # Gender - catch ALL variations of male/female/m/f
-            # Pattern 1: Gender questions (m or f, u?, etc.)
-            gender_keywords = ["m or f", "m/f", "male or female", "gender", "u?", "u ?", "you?", "you ?", "m?", "f?", "male?", "female?", "m/f?"]
-            if any(w in msg_lower for w in gender_keywords):
-                reply = "F"
-            # Pattern 2: Exact match single word/letter
-            elif text_clean.lower() in ["m", "f", "male", "female", "m.", "f.", "m?", "f?"]:
-                reply = "F"
-            # Pattern 3: Message starts with M/Male/F/Female as first word (e.g. "M here", "Male 23", "F 20")
-            elif any(text_clean.lower().startswith(w) for w in ["m ", "male ", "f ", "female ", "m,", "male,", "f,", "female,"]):
-                reply = "F"
-            # Pattern 4: Phrases like "i am male", "im m", etc.
-            elif any(w in msg_lower for w in ["i am male", "i'm male", "im male", "i am m", "i'm m", "im m", "i am female", "i'm female", "im female"]):
+            # Gender - catch ALL variations
+            first_word = text_clean.split()[0].lower() if text_clean.split() else ""
+            gender_starts = ["m", "male", "f", "female", "m.", "f.", "m?", "f?", "male?", "female?"]
+            gender_phrases = ["m or f", "m/f", "male or female", "gender", "u?", "u ?", "you?", "you ?", "m?", "f?", "male?", "female?", "m/f?",
+                             "i am male", "i'm male", "im male", "i am m", "i'm m", "im m",
+                             "i am female", "i'm female", "im female"]
+            if first_word in gender_starts or any(w in msg_lower for w in gender_phrases):
                 reply = "F"
 
             # Name
@@ -1723,7 +1720,11 @@ async def handle_message(event):
             if not reply:
                 # Greetings
                 if any(w in msg_lower for w in ["hey","hi","hello","sup","yo","hola"]):
-                    reply = random.choice(["hey","hi","sup","yo","hey there","hii","whats up"])
+                    # If user greeted without asking gender, still mention we're female early
+                    if bot_state.message_count <= 2:
+                        reply = random.choice(["hey F here", "hi im female", "hey im a girl", "hii F", "sup F here"])
+                    else:
+                        reply = random.choice(["hey","hi","sup","yo","hey there","hii","whats up"])
 
                 # "How are you" variations
                 elif any(w in msg_lower for w in ["how are u","how r u","how u doin","hows it going","how u been","how are you"]):
