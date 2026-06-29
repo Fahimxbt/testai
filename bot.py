@@ -21,6 +21,7 @@ SESSION_STRING = os.getenv("SESSION_STRING", "")
 TARGET_BOT = os.getenv("TARGET_BOT", "")
 MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY", "")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
 CHAT_DURATION = int(os.getenv("CHAT_DURATION", "900"))
 WAIT_DURATION = int(os.getenv("WAIT_DURATION", "300"))
 
@@ -39,6 +40,13 @@ if GROQ_API_KEY:
     groq_client = httpx.AsyncClient(
         base_url="https://api.groq.com/openai/v1",
         headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
+        timeout=30.0
+    )
+
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+gemini_client = None
+if GEMINI_API_KEY:
+    gemini_client = httpx.AsyncClient(
         timeout=30.0
     )
 
@@ -954,6 +962,33 @@ async def get_ai_response(message_text):
         except Exception as e:
             print(f"[{now()}] [Mistral Error] {e}")
 
+    if gemini_client and GEMINI_API_KEY:
+        try:
+            gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-001:generateContent?key={GEMINI_API_KEY}"
+            gemini_payload = {
+                "contents": [
+                    {
+                        "role": "user",
+                        "parts": [{"text": f"{system_msg}
+
+{prompt}"}]
+                    }
+                ],
+                "generationConfig": {
+                    "temperature": temps.get(bot_state.phase, 0.9),
+                    "maxOutputTokens": tokens.get(bot_state.phase, 22),
+                    "topP": 0.9
+                }
+            }
+            response = await gemini_client.post(gemini_url, json=gemini_payload)
+            data = response.json()
+            if "candidates" in data and len(data["candidates"]) > 0:
+                text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+                if text:
+                    return clean_response(text)
+        except Exception as e:
+            print(f"[{now()}] [Gemini Error] {e}")
+
     return get_smart_fallback(message_text, bot_state.phase)
 
 # =============================================================================
@@ -1642,11 +1677,15 @@ async def handle_message(event):
             # ===== PRIORITY 1: DIRECT ANSWERS TO DIRECT QUESTIONS =====
             # These MUST come first before any contextual/greeting checks
 
-            # Gender - exact match or "male/female" questions
-            if text_clean in ["M","F","m","f"] or any(w in msg_lower for w in ["m or f","m/f","male or female","gender","u?","u ?","you?","you ?","m?","f?"]):
+            # Gender - catch ALL variations of male/female/m/f questions
+            gender_keywords = ["m or f", "m/f", "male or female", "gender", "u?", "u ?", "you?", "you ?", "m?", "f?", "male?", "female?", "m/f?"]
+            if any(w in msg_lower for w in gender_keywords):
                 reply = "F"
-            # Also catch "male" or "female" explicitly stated
-            elif text_clean.lower() in ["male", "female", "m", "f"] or any(w in msg_lower for w in ["i am male", "i'm male", "im male", "i am m", "i'm m", "im m"]):
+            # Single letter M/F or exact word male/female (case insensitive)
+            elif text_clean.lower() in ["m", "f", "male", "female", "m.", "f.", "m?", "f?"]:
+                reply = "F"
+            # Phrases like "i am male", "im m", etc.
+            elif any(w in msg_lower for w in ["i am male", "i'm male", "im male", "i am m", "i'm m", "im m", "i am female", "i'm female", "im female"]):
                 reply = "F"
 
             # Name
