@@ -801,6 +801,7 @@ class ChatBot:
         self.rep_tracker = RepetitionTracker()
         self.memory = ConversationMemory()
         self._wind_down_started = False
+        self._gender_established = False
 
     def reset_chat(self):
         self.chat_history = []
@@ -822,6 +823,7 @@ class ChatBot:
         self._stop_clicked = False
         self._matched_message_id = None
         self._wind_down_started = False
+        self._gender_established = False
         if self._rating_timeout_task and not self._rating_timeout_task.done():
             self._rating_timeout_task.cancel()
         self._rating_timeout_task = None
@@ -1632,12 +1634,14 @@ async def handle_message(event):
             bot_state._track_task(bot_state._auto_end_task)
             await asyncio.sleep(3)
             opening = get_opening(persona)
-            # First message should include gender hint if opening is generic
-            if opening.lower() in ["hey", "hi", "sup", "yo", "hola", "hello"]:
+            # Only add gender hint on very first message of the session, and only once
+            if not bot_state._gender_established and bot_state.message_count == 0 and opening.lower() in ["hey", "hi", "sup", "yo", "hola", "hello"]:
                 opening = random.choice(["hey im F", "hi F here", "hey female here", "hii F", "sup im a girl"])
+                bot_state._gender_established = True
             try:
                 sent = await client.send_message(TARGET_BOT, opening)
                 bot_message_ids.add(sent.id)
+                bot_state._gender_established = True  # Mark gender as established after opening
                 print(f"[{now()}] Opening: {opening}")
             except Exception as e:
                 print(f"[{now()}] [Error] opening: {e}")
@@ -1687,6 +1691,7 @@ async def handle_message(event):
                              "i am female", "i'm female", "im female"]
             if first_word in gender_starts or any(w in msg_lower for w in gender_phrases):
                 reply = "F"
+                bot_state._gender_established = True
 
             # Name
             elif any(w in msg_lower for w in ["name","who are u","who are you","ur name","your name","what is your name","whats ur name","whats your name"]):
@@ -1718,13 +1723,15 @@ async def handle_message(event):
 
             # ===== PRIORITY 2: CONTEXTUAL RESPONSES (only if no direct answer matched) =====
             if not reply:
-                # Greetings
+                # Greetings - only mention gender on very first exchange
                 if any(w in msg_lower for w in ["hey","hi","hello","sup","yo","hola"]):
-                    # If user greeted without asking gender, still mention we're female early
-                    if bot_state.message_count <= 2:
-                        reply = random.choice(["hey F here", "hi im female", "hey im a girl", "hii F", "sup F here"])
+                    if bot_state.message_count == 0 and not bot_state._gender_established:
+                        # Very first message - establish gender naturally
+                        reply = random.choice(["hey F here", "hi im female", "hey im a girl", "hii F", "sup im a girl"])
+                        bot_state._gender_established = True
                     else:
-                        reply = random.choice(["hey","hi","sup","yo","hey there","hii","whats up"])
+                        # Normal greeting response - never repeat gender
+                        reply = random.choice(["hey","hi","sup","yo","hey there","hii","whats up","hey bby","hi there","yo whats up"])
 
                 # "How are you" variations
                 elif any(w in msg_lower for w in ["how are u","how r u","how u doin","hows it going","how u been","how are you"]):
@@ -1817,25 +1824,14 @@ async def handle_message(event):
                     available = [p for p in pool if not bot_state.rep_tracker.is_repetitive(p, threshold=1)]
                     if not available:
                         available = pool
+                    # Filter out gender-establishing phrases if already established
+                    if bot_state._gender_established:
+                        available = [p for p in available if not any(g in p.lower() for g in ["f here", "im female", "im a girl", "female here"])]
+                        if not available:
+                            available = pool
                     reply = random.choice(available)
 
-            # NATURAL NAME ASKING: After 3-5 messages, if name unknown, casually ask
-            # BUT ONLY if we already have a reply and it's not a direct answer to a question
-            # AND only 35% chance so it doesn't feel forced
-            if reply and not bot_state.memory.user_name and not bot_state.memory.asked_name and bot_state.message_count >= 3 and bot_state.message_count <= 6 and random.random() < 0.35:
-                # Only append name ask if reply is short and casual, not a direct answer
-                if reply not in ["F", f"{persona.name}", f"{persona.age}", f"india, {persona.location}", "divorced lol"]:
-                    bot_state.memory.asked_name = True
-                    name_asks = [
-                        "btw whats ur name",
-                        "what do they call u",
-                        "i dont even know ur name lol",
-                        "who am i talking to",
-                        "whats ur name"
-                    ]
-                    # We can only send one message here, so just send the reply
-                    # The name ask will happen on next turn if still needed
-                    pass
+
 
             if not reply:
                 reply = random.choice(["hey","sup","im good","chillin","tell me bout u"])
