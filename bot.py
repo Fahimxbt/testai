@@ -1663,19 +1663,18 @@ async def handle_message(event):
                 bot_state.state = BotState.CHATTING
                 bot_state.chat_start_time = datetime.now()
                 bot_state.cancel_all_tasks()
+                bot_state._opening_sent = True
             print(f"[{now()}] MATCHED! {persona.name}, {persona.age} | Timer started [Session {bot_state._chat_session_id}]")
             bot_state._auto_end_task = asyncio.create_task(safe_auto_end_after_delay())
             bot_state._track_task(bot_state._auto_end_task)
-            await asyncio.sleep(random.randint(2, 5))
-            if not bot_state._opening_sent:
-                bot_state._opening_sent = True
-                opening = get_opening(persona)
-                try:
-                    sent = await client.send_message(TARGET_BOT, opening)
-                    bot_message_ids.add(sent.id)
-                    print(f"[{now()}] Opening: {opening}")
-                except Exception as e:
-                    print(f"[{now()}] [Error] opening: {e}")
+            await asyncio.sleep(random.randint(2, 4))
+            opening = get_opening(persona)
+            try:
+                sent = await client.send_message(TARGET_BOT, opening)
+                bot_message_ids.add(sent.id)
+                print(f"[{now()}] Opening: {opening}")
+            except Exception as e:
+                print(f"[{now()}] [Error] opening: {e}")
         elif "hunting" in text_lower:
             print(f"[{now()}] Searching...")
         elif "already vibing" in text_lower:
@@ -1711,46 +1710,50 @@ async def handle_message(event):
             user_name = bot_state.memory.user_name
 
             # PRIORITY 1: ANSWER THE USER'S ACTUAL QUESTION
-            # Gender question - DIRECT "f" reply
-            gender_questions = ["m or f", "m/f", "male or female", "gender", "m?", "f?", "male?", "female?", "m/f?", "m/f", "m or f?", "male or female?"]
-            gender_starts = ["m", "f", "male", "female"]
-            first_word = text_clean.split()[0].lower() if text_clean.split() else ""
-            text_words = text_clean.split()
-
-            # Pattern: "M 23", "M23", "male 23", "m", "male", "M", "f?", "m/f" etc
-            is_gender_q = (
-                (first_word in gender_starts and len(text_words) <= 3)
-                or any(w in msg_lower for w in gender_questions)
-                or re.match(r'^[mf]\s*\d+$', text_clean.strip(), re.I)
-                or re.match(r'^[mf]\d+$', text_clean.strip(), re.I)
-                or text_clean.strip().lower() in ["m", "f", "male", "female", "m?", "f?"]
-            )
+            # Gender question - CATCH ALL: M, F, M 23, M or f, m/f, male, female, etc
+            gender_patterns = [
+                r'^\s*[mf]\s*$',
+                r'^\s*[mf]\s*\d+\s*$',
+                r'^\s*[mf]\?\s*$',
+                r'^\s*[mf]\s*/\s*[mf]\s*$',
+                r'^\s*[mf]\s+or\s+[mf]\s*$',
+                r'^\s*(male|female)\s*$',
+                r'^\s*(male|female)\?\s*$',
+            ]
+            is_gender_q = False
+            for pattern in gender_patterns:
+                if re.match(pattern, text_clean, re.IGNORECASE):
+                    is_gender_q = True
+                    break
+            if not is_gender_q:
+                gender_phrases = ["m or f", "m/f", "male or female", "gender", "m?", "f?", "male?", "female?", "m/f?", "m or f?", "male or female?"]
+                is_gender_q = any(w in msg_lower for w in gender_phrases)
 
             if is_gender_q:
                 reply = "f"
                 bot_state._gender_established = True
 
-            # Name question - DIRECT reply
+            # Name question - DIRECT
             elif any(w in msg_lower for w in ["name", "who are u", "who are you", "ur name", "your name", "what is your name", "whats ur name", "whats your name"]):
                 reply = persona.name
 
-            # Age question - DIRECT reply
+            # Age question - DIRECT
             elif any(w in msg_lower for w in ["age", "how old", "ur age", "your age", "old are you", "how many years"]):
                 reply = str(persona.age)
 
-            # Location question - DIRECT reply
+            # Location question - DIRECT
             elif any(w in msg_lower for w in ["where u from", "where are you from", "where from", "location", "city", "from where", "where do you live", "where are u from"]):
                 reply = persona.location
 
-            # Relationship - DIRECT reply
+            # Relationship - DIRECT
             elif any(w in msg_lower for w in ["relationship", "status", "married", "single", "divorce", "bf", "boyfriend", "husband"]):
                 reply = "divorced"
 
-            # Kids - DIRECT reply
+            # Kids - DIRECT
             elif any(w in msg_lower for w in ["kids", "children", "baby", "son", "daughter"]):
                 reply = "no kids"
 
-            # Work - DIRECT reply
+            # Work - DIRECT
             elif any(w in msg_lower for w in ["work", "job", "profession", "what do u do", "career", "study", "student", "college", "what u do"]):
                 reply = "i work"
 
@@ -1760,8 +1763,11 @@ async def handle_message(event):
 
             # PRIORITY 2: ACKNOWLEDGE WHAT USER SAID (not ignore it)
             if not reply:
+                # Extra safety: check if this looks like a gender question that slipped through
+                if re.match(r'^\s*[mf]\s*$', text_clean, re.IGNORECASE) or re.match(r'^\s*[mf]\s*\d+', text_clean, re.IGNORECASE):
+                    reply = "f"
                 # User gave their name
-                if any(w in msg_lower for w in ["my name is", "im ", "i am ", "call me ", "name is ", "i'm "]):
+                elif any(w in msg_lower for w in ["my name is", "im ", "i am ", "call me ", "name is ", "i'm "]):
                     bot_state.memory.extract_facts(text)
                     user_name = bot_state.memory.user_name
                     if user_name:
@@ -1774,9 +1780,9 @@ async def handle_message(event):
                     else:
                         reply = random.choice(["nice to meet u", "cool", f"im {persona.name}"])
 
-                # Greetings
+                # Greetings - simple reply
                 elif any(w in msg_lower for w in ["hey", "hi", "hello", "sup", "yo", "hola"]):
-                    reply = random.choice(["hey whats up", "hi there", "sup", "yo", "hey there", "hii", "whats up", "hey hows it goin"])
+                    reply = random.choice(["hey", "hi", "sup", "yo", "hii"])
 
                 # How are you
                 elif any(w in msg_lower for w in ["how are u", "how r u", "how u doin", "hows it going", "how u been", "how are you"]):
@@ -1792,7 +1798,7 @@ async def handle_message(event):
 
                 # What / confused
                 elif text_clean.lower() in ["what", "what?", "huh", "huh?", "?"]:
-                    reply = random.choice(["what", "huh", "u ok?", "say again", "?", "u good?"])
+                    reply = random.choice(["u ok?", "say again", "what u mean"])
 
                 # Short questions
                 elif text_clean.lower() in ["from?", "from", "where?", "where"]:
@@ -1844,11 +1850,11 @@ async def handle_message(event):
 
                 # Very short
                 elif len(text_clean) <= 2:
-                    reply = random.choice(["what", "huh", "yeah", "ok", "hm", "?", "what u mean"])
+                    reply = random.choice(["say again", "what u mean", "huh"])
 
                 # Short
                 elif len(text_clean) <= 4:
-                    reply = random.choice(["what u mean", "huh", "yeah", "ok", "hm", "tell me more", "what about it", "go on"])
+                    reply = random.choice(["tell me more", "what about it", "go on", "say again"])
 
                 # Everything else - try AI
                 else:
@@ -1865,28 +1871,7 @@ async def handle_message(event):
             if not reply:
                 reply = random.choice(["hey", "sup", "im good", "chillin", "tell me bout u"])
 
-            # Name asking: ONLY if user didnt just ask something AND we dont know their name
-            # AND we havent asked too many times
-            if not bot_state._name_asked and not bot_state.memory.user_name and bot_state.message_count >= 1 and bot_state.message_count <= 4:
-                # Only ask if the current message was NOT a question directed at bot
-                user_asked_bot = any(w in msg_lower for w in ["name", "age", "where", "from", "how", "what", "who", "m or f", "m/f"])
-                if not user_asked_bot and random.random() < 0.4:
-                    name_asks = [
-                        "whats ur name btw",
-                        "u got a name",
-                        "what do i call u",
-                        "ur name?",
-                        "who am i talkin to"
-                    ]
-                    # If reply is very short, replace it. Otherwise append.
-                    if reply and len(reply) < 12:
-                        reply = random.choice(name_asks)
-                    elif reply and len(reply) < 20:
-                        reply = reply + " " + random.choice(["whats ur name", "u got a name", "what do i call u"])
-                    else:
-                        reply = random.choice(name_asks)
-                    bot_state._name_asked = True
-                    bot_state._name_ask_turn = bot_state.message_count
+            # Name asking removed - bot only replies to what user says, no extra questions
 
             reply = clean_response(reply)
             bot_state.last_sent_text = reply
