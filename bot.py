@@ -476,7 +476,7 @@ def is_male_dominant(text):
     return any(p in t for p in MALE_DOMINANT_PHRASES)
 
 # =============================================================================
-# SYSTEM PROMPT BUILDER (Compact, single core)
+# SYSTEM PROMPT BUILDER
 # =============================================================================
 CORE_PERSONALITY = """You are {name}, a {age}-year-old divorced woman from {loc}, India.
 You are thick curvy with huge boobs and fat ass.
@@ -610,17 +610,10 @@ def detect_user_vibe(message):
     return vibes[0]
 
 # =============================================================================
-# ADAPTIVE PHASE CALCULATION - FIXED: More nuanced behavior-based progression
+# ADAPTIVE PHASE CALCULATION - FIXED
 # =============================================================================
 def calculate_adaptive_phase(base_phase, user_vibe, chat_history, chat_start_time):
-    """Adjust phase based on user behavior, not just time. 
-
-    KEY FIXES:
-    - If user is friendly/curious, stay in lower phases longer (warm up naturally)
-    - Only escalate to sexual phases if user is actively sexual
-    - If user is resistant, stay at phase 1-2 max
-    - Require sustained sexual interest before jumping phases
-    """
+    """Adjust phase based on user behavior, not just time."""
     if not chat_start_time:
         return base_phase
 
@@ -643,31 +636,24 @@ def calculate_adaptive_phase(base_phase, user_vibe, chat_history, chat_start_tim
             elif vibe == "resistant":
                 resistant_count += 1
 
-    # If user is resistant, cap at phase 2
     if resistant_count >= 2:
         return min(base_phase, 2)
 
-    # If user is purely friendly/curious with NO sexual content, stay casual longer
     if total_user_msgs >= 3:
         sexual_ratio = sexual_count / total_user_msgs
         flirty_ratio = flirty_count / total_user_msgs
 
-        # User is mostly friendly/curious - dont rush to sexual
         if sexual_ratio < 0.2 and flirty_ratio < 0.3:
-            # Stay in phase 1-3 even if time has passed
             if base_phase <= 3:
-                return base_phase  # Let time naturally progress but dont force it
+                return base_phase
             else:
-                # Cap at phase 3 until user shows interest
                 return 3
 
-        # User is flirty but not explicit - warm up slowly
         if flirty_ratio >= 0.3 and sexual_ratio < 0.3:
             if base_phase > 4:
-                return 4  # Cap at light sexual tension
+                return 4
             return base_phase
 
-        # User is actively sexual - can escalate
         if sexual_ratio >= 0.5:
             if sexual_ratio >= 0.7 and base_phase < 5:
                 boost = min(2, 5 - base_phase)
@@ -676,7 +662,6 @@ def calculate_adaptive_phase(base_phase, user_vibe, chat_history, chat_start_tim
                 boost = min(1, 4 - base_phase)
                 return min(11, base_phase + boost)
 
-    # Default: gentle progression based on time
     return base_phase
 
 # =============================================================================
@@ -726,7 +711,7 @@ class RepetitionTracker:
         self.phrase_counts = Counter()
 
 # =============================================================================
-# CONVERSATION MEMORY - ENHANCED with name tracking
+# CONVERSATION MEMORY
 # =============================================================================
 class ConversationMemory:
     def __init__(self):
@@ -737,7 +722,7 @@ class ConversationMemory:
         self.mentioned_kinks = []
         self.conversation_topics = []
         self.asked_name = False
-        self.name_ask_count = 0  # Track how many times we asked
+        self.name_ask_count = 0
 
     def extract_facts(self, message):
         msg_lower = message.lower()
@@ -840,9 +825,9 @@ class ChatBot:
         self.memory = ConversationMemory()
         self._wind_down_started = False
         self._gender_established = False
-        self._name_asked = False  # Track if we asked for name
-        self._name_ask_turn = 0   # Which turn we asked
-        self._last_topic = None   # Track conversation topic
+        self._name_asked = False
+        self._name_ask_turn = 0
+        self._last_topic = None
 
     def reset_chat(self):
         self.chat_history = []
@@ -1524,7 +1509,6 @@ async def auto_end_chat():
             print(f"[{now()}] [Session {my_session}] STALE auto-end task. Aborting.")
             return
 
-    # Send bye message
     bye_pool = GOODBYES.get(bot_state.phase, GOODBYES[1])
     bye_msg = random.choice(bye_pool)
     try:
@@ -1642,7 +1626,7 @@ async def handle_chat_ended(msg_id, has_buttons, button_texts, text=""):
         await send_stop_and_report()
 
 # =============================================================================
-# MESSAGE HANDLER - FIXED PHASE 1: Natural, Human-like Conversation
+# MESSAGE HANDLER - v14: ACTUALLY RESPONDS to what user says
 # =============================================================================
 @client.on(events.NewMessage(chats=TARGET_BOT))
 async def handle_message(event):
@@ -1663,7 +1647,6 @@ async def handle_message(event):
     text_lower = text.lower()
     text_clean = text.strip()
 
-    # Store matched message ID for Stop button clicking later
     if is_matched_message(text, has_buttons):
         bot_state._matched_message_id = msg_id
         print(f"[{now()}] Stored matched message id={msg_id}")
@@ -1707,12 +1690,10 @@ async def handle_message(event):
             print(f"[{now()}] Already replying, skip")
             return
 
-        # Extract user info
         bot_state.memory.extract_facts(text)
-
         is_first_2_mins = bot_state.chat_start_time and (datetime.now() - bot_state.chat_start_time).total_seconds() < 120
 
-        # ===== FIXED PHASE 1: NATURAL, HUMAN-LIKE CONVERSATION =====
+        # ===== v14 PHASE 1: RESPOND TO USER FIRST, THEN FLOW NATURALLY =====
         if is_first_2_mins:
             bot_state.pending_reply = True
             await asyncio.sleep(random.randint(2, 5))
@@ -1721,116 +1702,82 @@ async def handle_message(event):
             reply = None
             user_name = bot_state.memory.user_name
 
-            # --- GENDER HANDLING: Only respond to direct gender questions, never volunteer ---
-            gender_questions = ["m or f", "m/f", "male or female", "gender", "u?", "you?", "m?", "f?", "male?", "female?", "m/f?"]
+            # PRIORITY 1: ANSWER THE USER'S ACTUAL QUESTION
+            # Gender question
+            gender_questions = ["m or f", "m/f", "male or female", "gender", "m?", "f?", "male?", "female?", "m/f?"]
             gender_starts = ["m", "f", "male", "female"]
             first_word = text_clean.split()[0].lower() if text_clean.split() else ""
 
             is_gender_q = (
-                first_word in gender_starts and len(text_clean.split()) <= 2
-            ) or any(w in msg_lower for w in gender_questions)
+                (first_word in gender_starts and len(text_clean.split()) <= 2)
+                or any(w in msg_lower for w in gender_questions)
+            )
 
             if is_gender_q:
-                # Natural response, not just "F"
-                gender_replies = [
-                    "im a girl lol",
-                    "female here",
-                    "im F",
-                    "girl",
-                    "a woman obviously"
-                ]
-                reply = random.choice(gender_replies)
+                reply = random.choice(["im a girl lol", "female", "im F", "a woman", "girl obviously"])
                 bot_state._gender_established = True
 
-            # --- NAME HANDLING ---
+            # Name question
             elif any(w in msg_lower for w in ["name", "who are u", "who are you", "ur name", "your name", "what is your name", "whats ur name", "whats your name"]):
-                name_replies = [
-                    f"im {persona.name}",
-                    f"{persona.name}",
-                    f"call me {persona.name}",
-                    f"{persona.name} here"
-                ]
-                reply = random.choice(name_replies)
+                reply = random.choice([f"im {persona.name}", f"{persona.name}", f"call me {persona.name}", f"{persona.name} here"])
 
-            # --- AGE HANDLING ---
+            # Age question
             elif any(w in msg_lower for w in ["age", "how old", "ur age", "your age", "old are you", "how many years"]):
-                age_replies = [
-                    f"im {persona.age}",
-                    f"{persona.age} lol",
-                    f"{persona.age} why u askin",
-                    f"old enough to know better"
-                ]
-                reply = random.choice(age_replies)
+                reply = random.choice([f"im {persona.age}", f"{persona.age} lol", f"{persona.age} why u askin", f"old enough"])
 
-            # --- LOCATION HANDLING ---
+            # Location question
             elif any(w in msg_lower for w in ["where u from", "where are you from", "where from", "location", "city", "from where", "where do you live", "where are u from"]):
-                loc_replies = [
-                    f"india, {persona.location}",
-                    f"{persona.location} india",
-                    f"from {persona.location}",
-                    f"{persona.location} born and raised"
-                ]
-                reply = random.choice(loc_replies)
+                reply = random.choice([f"india, {persona.location}", f"{persona.location} india", f"from {persona.location}", f"{persona.location}"])
 
-            # --- RELATIONSHIP STATUS ---
+            # Relationship
             elif any(w in msg_lower for w in ["relationship", "status", "married", "single", "divorce", "bf", "boyfriend", "husband"]):
                 reply = random.choice(["divorced lol", "single and free", "not married anymore", "divorced and happy"])
 
-            # --- KIDS ---
+            # Kids
             elif any(w in msg_lower for w in ["kids", "children", "baby", "son", "daughter"]):
                 reply = random.choice(["nah no kids", "no kids", "just me", "nah just me and my freedom"])
 
-            # --- WORK/JOB ---
+            # Work
             elif any(w in msg_lower for w in ["work", "job", "profession", "what do u do", "career", "study", "student", "college", "what u do"]):
                 reply = random.choice(["i work", "office job", "nothing fancy", "just working", "corporate life", "boring office stuff"])
 
-            # --- CONTACT INFO ---
+            # Contact info
             elif any(w in msg_lower for w in ["telegram", "insta", "instagram", "snap", "snapchat", "whatsapp", "number", "phone", "contact", "dm", "link", "id", "@", "t.me"]):
                 reply = random.choice(CONTACT_DEFLECTIONS[:10])
 
-            # --- CONTEXTUAL RESPONSES (if no direct question matched) ---
+            # PRIORITY 2: ACKNOWLEDGE WHAT USER SAID (not ignore it)
             if not reply:
-                # User shares their name
+                # User gave their name
                 if any(w in msg_lower for w in ["my name is", "im ", "i am ", "call me ", "name is ", "i'm "]):
                     bot_state.memory.extract_facts(text)
                     user_name = bot_state.memory.user_name
                     if user_name:
                         reply = random.choice([
                             f"nice to meet u {user_name}",
-                            f"hey {user_name}",
+                            f"hey {user_name} im {persona.name}",
                             f"{user_name} nice name",
-                            f"cool im {persona.name}"
+                            f"cool {user_name} im {persona.name}"
                         ])
                     else:
                         reply = random.choice(["nice to meet u", "cool", f"im {persona.name}"])
 
-                # Greetings - natural, never mention gender unless asked
+                # Greetings
                 elif any(w in msg_lower for w in ["hey", "hi", "hello", "sup", "yo", "hola"]):
-                    greeting_replies = [
-                        "hey whats up",
-                        "hi there",
-                        "sup",
-                        "yo",
-                        "hey there",
-                        "hii",
-                        "whats up",
-                        "hey hows it goin"
-                    ]
-                    reply = random.choice(greeting_replies)
+                    reply = random.choice(["hey whats up", "hi there", "sup", "yo", "hey there", "hii", "whats up", "hey hows it goin"])
 
-                # "How are you" variations
+                # How are you
                 elif any(w in msg_lower for w in ["how are u", "how r u", "how u doin", "hows it going", "how u been", "how are you"]):
-                    reply = random.choice(["im good", "doin okay", "chillin", "not bad", "pretty good", "cant complain", "alright u"])
+                    reply = random.choice(["im good u", "doin okay u", "chillin u", "not bad u", "pretty good u", "alright u"])
 
-                # "Wbu / What about you"
+                # Wbu
                 elif any(w in msg_lower for w in ["wbu", "what about u", "what abt u", "hbu", "how bout u", "and u"]):
-                    reply = random.choice(["chillin", "same", "not much", "just here", "bored af", "trying to have fun", "u first"])
+                    reply = random.choice(["chillin", "same", "not much", "just here", "bored af", "trying to have fun"])
 
-                # "Me too / Same"
+                # Me too
                 elif any(w in msg_lower for w in ["me too", "same", "same here", "me also", "i also", "i too"]):
                     reply = random.choice(["cool", "nice", "same", "great minds", "lol", "for real"])
 
-                # "What" / confused
+                # What / confused
                 elif text_clean.lower() in ["what", "what?", "huh", "huh?", "?"]:
                     reply = random.choice(["what", "huh", "u ok?", "say again", "?", "u good?"])
 
@@ -1843,38 +1790,38 @@ async def handle_message(event):
                     reply = f"{persona.name}"
 
                 # User says what theyre doing
-                elif any(w in msg_lower for w in ["chilling", "relaxing", "at home", "at work", "at shop", "at store", "studying", "reading", "watching", "playing", "gaming", "eating", "sleeping", "working", "shopping", "traveling", "driving", "walking", "gym", "exercise", "workout"]):
+                elif any(w in msg_lower for w in ["chilling", "relaxing", "at home", "at work", "at shop", "studying", "reading", "watching", "playing", "gaming", "eating", "sleeping", "working", "shopping", "traveling", "driving", "walking", "gym", "exercise", "workout"]):
                     reply = random.choice(["sounds chill", "nice", "what u doin there", "busy day?", "fun?", "cool", "enjoy", "lucky u"])
 
                 # User asks what bot is doing
-                elif any(w in msg_lower for w in ["what u doin", "what u doing", "what are u doing", "what u up to", "what u doin rn", "wyd"]):
-                    reply = random.choice(["chillin", "nothin much", "just here", "bored", "waiting for u to entertain me", "relaxing", "texting u obviously"])
+                elif any(w in msg_lower for w in ["what u doin", "what u doing", "what are u doing", "what u up to", "wyd"]):
+                    reply = random.choice(["chillin", "nothin much", "just here", "bored", "texting u obviously", "relaxing"])
 
                 # User asks why bot is here
                 elif any(w in msg_lower for w in ["why u here", "why are u here", "here for what", "what u want", "what u lookin for", "why u on here"]):
                     reply = random.choice(["just chatting", "to meet ppl", "bored", "u?", "same as everyone", "to have fun", "why u here"])
 
-                # User says "No"
+                # No
                 elif text_clean.lower() in ["no", "nope", "nah", "no way", "never"]:
                     reply = random.choice(["ok", "alright", "cool", "why not", "suit urself", "fine", "ur loss"])
 
-                # User says "Yes"
+                # Yes
                 elif text_clean.lower() in ["yes", "yeah", "yep", "ya", "sure", "ok", "okay", "k"]:
                     reply = random.choice(["cool", "nice", "alright", "bet", "lets go", "ok", "good"])
 
-                # User mentions preferences
+                # Older women
                 elif any(w in msg_lower for w in ["older women", "older woman", "mature", "milf", "aunty", "bhabhi", "older girls", "experienced"]):
                     reply = random.choice(["oh really", "u got taste", "how old u like", "u like that huh", "interesting", "u into that"])
 
-                # User asks about appearance
+                # Appearance
                 elif any(w in msg_lower for w in ["pic", "photo", "picture", "look like", "looks", "pretty", "beautiful", "cute", "hot", "sexy", "show", "face", "body", "figure"]):
                     reply = random.choice(["nah not yet", "u first", "maybe later", "why u wanna know", "im shy", "not yet bby"])
 
-                # User asks if real
+                # Real or fake
                 elif any(w in msg_lower for w in ["real", "fake", "bot", "ai", "robot", "catfish", "genuine", "really a woman", "really a girl"]):
                     reply = random.choice(["im real", "what u think", "as real as it gets", "why u askin", "u doubt me", "lol im real"])
 
-                # User asks to meet/call/video
+                # Meet/call/video
                 elif any(w in msg_lower for w in ["meet", "call", "video", "vc", "voice", "cam", "camera", "show me", "come", "visit"]):
                     reply = random.choice(["maybe later", "not yet", "lets talk first", "u move fast", "patience", "slow down"])
 
@@ -1882,17 +1829,16 @@ async def handle_message(event):
                 elif "?" in text:
                     reply = random.choice(["why u askin", "tell me bout u first", "u curious huh", "ask somethin fun", "u interviewin me lol"])
 
-                # Very short messages
+                # Very short
                 elif len(text_clean) <= 2:
-                    reply = random.choice(["what", "huh", "yeah", "ok", "hm", "?", "say more"])
+                    reply = random.choice(["what", "huh", "yeah", "ok", "hm", "?", "what u mean"])
 
-                # Short messages
+                # Short
                 elif len(text_clean) <= 4:
-                    reply = random.choice(["what", "huh", "yeah", "ok", "hm", "say more", "elaborate", "tell me"])
+                    reply = random.choice(["what u mean", "huh", "yeah", "ok", "hm", "tell me more", "what about it", "go on"])
 
-                # Everything else - use AI or fallback
+                # Everything else - try AI
                 else:
-                    # Try AI first for natural response
                     try:
                         reply = await get_ai_response(text)
                     except:
@@ -1902,10 +1848,16 @@ async def handle_message(event):
                             available = pool
                         reply = random.choice(available)
 
-            # --- ASK FOR USER'S NAME NATURALLY ---
-            # If we havent asked for name yet and its been 2-3 messages, ask naturally
-            if not bot_state._name_asked and not bot_state.memory.user_name and bot_state.message_count >= 1 and bot_state.message_count <= 3:
-                if random.random() < 0.6:  # 60% chance to ask
+            # ASK FOR NAME NATURALLY - only if no question was asked AND we dont know name
+            if not reply:
+                reply = random.choice(["hey", "sup", "im good", "chillin", "tell me bout u"])
+
+            # Name asking: ONLY if user didnt just ask something AND we dont know their name
+            # AND we havent asked too many times
+            if not bot_state._name_asked and not bot_state.memory.user_name and bot_state.message_count >= 1 and bot_state.message_count <= 4:
+                # Only ask if the current message was NOT a question directed at bot
+                user_asked_bot = any(w in msg_lower for w in ["name", "age", "where", "from", "how", "what", "who", "m or f", "m/f"])
+                if not user_asked_bot and random.random() < 0.4:
                     name_asks = [
                         "whats ur name btw",
                         "u got a name",
@@ -1913,21 +1865,16 @@ async def handle_message(event):
                         "ur name?",
                         "who am i talkin to"
                     ]
-                    # Append to reply or replace if very short
-                    if reply and len(reply) < 15:
+                    # If reply is very short, replace it. Otherwise append.
+                    if reply and len(reply) < 12:
                         reply = random.choice(name_asks)
-                    elif reply:
+                    elif reply and len(reply) < 20:
                         reply = reply + " " + random.choice(["whats ur name", "u got a name", "what do i call u"])
                     else:
                         reply = random.choice(name_asks)
                     bot_state._name_asked = True
                     bot_state._name_ask_turn = bot_state.message_count
 
-            # Fallback if still no reply
-            if not reply:
-                reply = random.choice(["hey", "sup", "im good", "chillin", "tell me bout u"])
-
-            # Clean and send
             reply = clean_response(reply)
             bot_state.last_sent_text = reply
             bot_state.chat_history.append({"role": "user", "content": text})
@@ -1944,7 +1891,7 @@ async def handle_message(event):
             finally:
                 bot_state.pending_reply = False
             return
-        # ===== END FIXED PHASE 1 BLOCK =====
+        # ===== END PHASE 1 BLOCK =====
 
         # Media handling
         if has_media or text == "[media]":
@@ -1986,7 +1933,6 @@ async def handle_message(event):
                 print(f"[{now()}] Rate limit: {elapsed:.1f}s")
                 return
 
-        # Extract user info again
         bot_state.memory.extract_facts(text)
 
         bot_state.pending_reply = True
@@ -2244,7 +2190,7 @@ async def cmd_stop(event):
 
 @client.on(events.NewMessage(pattern=r"/stats", from_users="me"))
 async def cmd_stats(event):
-    await event.reply(f"Total: {bot_state.total_interactions}\nPersona: {persona.name}, {persona.age}")
+    await event.reply(f"Total: {bot_state.total_interactions}\nPersona: {persona.name}, {bot_state.age}")
 
 @client.on(events.NewMessage(pattern=r"/newpersona", from_users="me"))
 async def cmd_new_persona(event):
@@ -2288,7 +2234,7 @@ async def keep_alive():
         print(f"[{now()}] [KEEPALIVE] State: {bot_state.state}, Phase: {bot_state.phase}, Session: {bot_state._chat_session_id}, Tasks: {len(bot_state._active_tasks)}")
 
 async def main():
-    print("Riya v13.0 starting...")
+    print("Riya v14.0 starting...")
     if not TELEGRAM_API_ID or not TELEGRAM_API_HASH:
         print("Missing API credentials!")
         return
