@@ -828,6 +828,7 @@ class ChatBot:
         self._name_asked = False
         self._name_ask_turn = 0
         self._last_topic = None
+        self._opening_sent = False
 
     def reset_chat(self):
         self.chat_history = []
@@ -853,6 +854,7 @@ class ChatBot:
         self._name_asked = False
         self._name_ask_turn = 0
         self._last_topic = None
+        self._opening_sent = False
         if self._rating_timeout_task and not self._rating_timeout_task.done():
             self._rating_timeout_task.cancel()
         self._rating_timeout_task = None
@@ -1272,6 +1274,7 @@ async def start_finding():
         bot_state.message_count = 0
         bot_message_ids.clear()
     try:
+        await asyncio.sleep(random.randint(2, 5))
         sent = await client.send_message(TARGET_BOT, "⚡ Find a Vibe")
         bot_message_ids.add(sent.id)
         print(f"[{now()}] -> Find a Vibe ({persona.name}, {persona.age}, {persona.mood}) [Session {bot_state._chat_session_id}]")
@@ -1283,6 +1286,7 @@ async def start_finding():
 async def send_next():
     if not bot_state.can_perform_action(cooldown=3):
         return
+    await asyncio.sleep(random.randint(2, 6))
     try:
         sent = await client.send_message(TARGET_BOT, "⏭️ Next")
         bot_message_ids.add(sent.id)
@@ -1323,6 +1327,7 @@ async def send_stop_and_report():
     else:
         print(f"[{now()}] [WARN] Could not find Stop button, sending text stop instead")
         try:
+            await asyncio.sleep(random.randint(2, 5))
             sent = await client.send_message(TARGET_BOT, "⏹️ Stop")
             bot_message_ids.add(sent.id)
             async with bot_state._lock:
@@ -1511,6 +1516,7 @@ async def auto_end_chat():
 
     bye_pool = GOODBYES.get(bot_state.phase, GOODBYES[1])
     bye_msg = random.choice(bye_pool)
+    await asyncio.sleep(random.randint(2, 6))
     try:
         sent = await client.send_message(TARGET_BOT, bye_msg)
         bot_message_ids.add(sent.id)
@@ -1660,14 +1666,16 @@ async def handle_message(event):
             print(f"[{now()}] MATCHED! {persona.name}, {persona.age} | Timer started [Session {bot_state._chat_session_id}]")
             bot_state._auto_end_task = asyncio.create_task(safe_auto_end_after_delay())
             bot_state._track_task(bot_state._auto_end_task)
-            await asyncio.sleep(3)
-            opening = get_opening(persona)
-            try:
-                sent = await client.send_message(TARGET_BOT, opening)
-                bot_message_ids.add(sent.id)
-                print(f"[{now()}] Opening: {opening}")
-            except Exception as e:
-                print(f"[{now()}] [Error] opening: {e}")
+            await asyncio.sleep(random.randint(2, 5))
+            if not bot_state._opening_sent:
+                bot_state._opening_sent = True
+                opening = get_opening(persona)
+                try:
+                    sent = await client.send_message(TARGET_BOT, opening)
+                    bot_message_ids.add(sent.id)
+                    print(f"[{now()}] Opening: {opening}")
+                except Exception as e:
+                    print(f"[{now()}] [Error] opening: {e}")
         elif "hunting" in text_lower:
             print(f"[{now()}] Searching...")
         elif "already vibing" in text_lower:
@@ -1703,43 +1711,48 @@ async def handle_message(event):
             user_name = bot_state.memory.user_name
 
             # PRIORITY 1: ANSWER THE USER'S ACTUAL QUESTION
-            # Gender question
-            gender_questions = ["m or f", "m/f", "male or female", "gender", "m?", "f?", "male?", "female?", "m/f?"]
+            # Gender question - DIRECT "f" reply
+            gender_questions = ["m or f", "m/f", "male or female", "gender", "m?", "f?", "male?", "female?", "m/f?", "m/f", "m or f?", "male or female?"]
             gender_starts = ["m", "f", "male", "female"]
             first_word = text_clean.split()[0].lower() if text_clean.split() else ""
+            text_words = text_clean.split()
 
+            # Pattern: "M 23", "M23", "male 23", "m", "male", "M", "f?", "m/f" etc
             is_gender_q = (
-                (first_word in gender_starts and len(text_clean.split()) <= 2)
+                (first_word in gender_starts and len(text_words) <= 3)
                 or any(w in msg_lower for w in gender_questions)
+                or re.match(r'^[mf]\s*\d+$', text_clean.strip(), re.I)
+                or re.match(r'^[mf]\d+$', text_clean.strip(), re.I)
+                or text_clean.strip().lower() in ["m", "f", "male", "female", "m?", "f?"]
             )
 
             if is_gender_q:
-                reply = random.choice(["im a girl lol", "female", "im F", "a woman", "girl obviously"])
+                reply = "f"
                 bot_state._gender_established = True
 
-            # Name question
+            # Name question - DIRECT reply
             elif any(w in msg_lower for w in ["name", "who are u", "who are you", "ur name", "your name", "what is your name", "whats ur name", "whats your name"]):
-                reply = random.choice([f"im {persona.name}", f"{persona.name}", f"call me {persona.name}", f"{persona.name} here"])
+                reply = persona.name
 
-            # Age question
+            # Age question - DIRECT reply
             elif any(w in msg_lower for w in ["age", "how old", "ur age", "your age", "old are you", "how many years"]):
-                reply = random.choice([f"im {persona.age}", f"{persona.age} lol", f"{persona.age} why u askin", f"old enough"])
+                reply = str(persona.age)
 
-            # Location question
+            # Location question - DIRECT reply
             elif any(w in msg_lower for w in ["where u from", "where are you from", "where from", "location", "city", "from where", "where do you live", "where are u from"]):
-                reply = random.choice([f"india, {persona.location}", f"{persona.location} india", f"from {persona.location}", f"{persona.location}"])
+                reply = persona.location
 
-            # Relationship
+            # Relationship - DIRECT reply
             elif any(w in msg_lower for w in ["relationship", "status", "married", "single", "divorce", "bf", "boyfriend", "husband"]):
-                reply = random.choice(["divorced lol", "single and free", "not married anymore", "divorced and happy"])
+                reply = "divorced"
 
-            # Kids
+            # Kids - DIRECT reply
             elif any(w in msg_lower for w in ["kids", "children", "baby", "son", "daughter"]):
-                reply = random.choice(["nah no kids", "no kids", "just me", "nah just me and my freedom"])
+                reply = "no kids"
 
-            # Work
+            # Work - DIRECT reply
             elif any(w in msg_lower for w in ["work", "job", "profession", "what do u do", "career", "study", "student", "college", "what u do"]):
-                reply = random.choice(["i work", "office job", "nothing fancy", "just working", "corporate life", "boring office stuff"])
+                reply = "i work"
 
             # Contact info
             elif any(w in msg_lower for w in ["telegram", "insta", "instagram", "snap", "snapchat", "whatsapp", "number", "phone", "contact", "dm", "link", "id", "@", "t.me"]):
@@ -1783,11 +1796,11 @@ async def handle_message(event):
 
                 # Short questions
                 elif text_clean.lower() in ["from?", "from", "where?", "where"]:
-                    reply = f"india, {persona.location}"
+                    reply = persona.location
                 elif text_clean.lower() in ["age?", "age"]:
-                    reply = f"{persona.age}"
+                    reply = str(persona.age)
                 elif text_clean.lower() in ["name?", "name"]:
-                    reply = f"{persona.name}"
+                    reply = persona.name
 
                 # User says what theyre doing
                 elif any(w in msg_lower for w in ["chilling", "relaxing", "at home", "at work", "at shop", "studying", "reading", "watching", "playing", "gaming", "eating", "sleeping", "working", "shopping", "traveling", "driving", "walking", "gym", "exercise", "workout"]):
@@ -1882,6 +1895,7 @@ async def handle_message(event):
             bot_state.rep_tracker.add(reply)
             bot_state.message_count += 1
             bot_state.last_message_time = datetime.now()
+            await asyncio.sleep(random.randint(2, 6))
             try:
                 sent = await client.send_message(TARGET_BOT, reply)
                 bot_message_ids.add(sent.id)
@@ -1910,6 +1924,7 @@ async def handle_message(event):
             bot_state.chat_history.append({"role": "user", "content": "[media]"})
             bot_state.chat_history.append({"role": "assistant", "content": ai_response})
             bot_state.rep_tracker.add(ai_response)
+            await asyncio.sleep(random.randint(2, 6))
             try:
                 sent = await client.send_message(TARGET_BOT, ai_response)
                 bot_message_ids.add(sent.id)
@@ -1958,6 +1973,7 @@ async def handle_message(event):
         bot_state.last_sent_text = ai_response
         bot_state.chat_history.append({"role": "assistant", "content": ai_response})
         bot_state.rep_tracker.add(ai_response)
+        await asyncio.sleep(random.randint(2, 10))
         try:
             sent = await client.send_message(TARGET_BOT, ai_response)
             bot_message_ids.add(sent.id)
@@ -2143,6 +2159,7 @@ async def rating_timeout_watchdog():
 async def cmd_start(event):
     await event.reply("Starting...")
     try:
+        await asyncio.sleep(random.randint(2, 5))
         await client.send_message(TARGET_BOT, "/start")
         await asyncio.sleep(3)
         await safe_start_finding()
@@ -2251,6 +2268,7 @@ async def main():
     keepalive_task = asyncio.create_task(keep_alive())
     bot_state._track_task(keepalive_task)
     try:
+        await asyncio.sleep(random.randint(2, 5))
         await client.send_message(TARGET_BOT, "/start")
         await asyncio.sleep(3)
         await safe_start_finding()
